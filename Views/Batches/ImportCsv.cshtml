@@ -1,0 +1,34 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    ViewData["Title"] = "Import from list";
+    var recipients = ViewBag.Recipients as List<SelectListItem> ?? new();
+}
+<div class="page-head no-print"><h1>Import sheets from a list</h1>
+    <div class="head-actions"><a class="btn" asp-action="ImportPdf">Import PDFs instead</a></div>
+</div>
+
+<div class="card">
+    <p class="muted">Upload a <strong>CSV</strong> or <strong>Excel (.xlsx)</strong> file with one row per part. The first row must be a header. One batch is created with all the sheets.</p>
+    <p class="muted">Recognised columns (header names, any order): <code>PartNo</code>, <code>DrawingNo</code>, <code>ProjectName</code>, <code>Section</code>, <code>Qty</code>, <code>CutLength</code>, <code>Material</code>, <code>Operations</code>, <code>ContractNo</code>, <code>WorkOrderNo</code>, <code>Galvanize</code>. Required: Part No, Drawing No, Section.</p>
+    <p class="muted"><code>Operations</code> is a list separated by <code>;</code> — e.g. <code>CUT_DRILL;CUTTING;MILLING</code>. <code>Galvanize</code> = yes/no. If Material is blank it's set from the drawing (H ⇒ S355, else S235).</p>
+</div>
+
+<form class="card" asp-action="ImportCsv" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <div class="field"><label>CSV / XLSX file</label><input class="input file-input" type="file" name="file" accept=".csv,.xlsx" /></div>
+    <div class="grid-2">
+        <div class="field"><label>Batch name</label><input class="input" name="batchName" placeholder="e.g. BATCH-0002" /></div>
+        <div class="field"><label>Project (fallback if blank in rows)</label><input class="input" name="projectName" placeholder="e.g. S2  220 kv" /></div>
+    </div>
+    <div class="grid-2">
+        <div class="field">
+            <label>Send to first reviewer now (optional)</label>
+            <select class="input" name="sendTo">
+                <option value="">— Keep as draft —</option>
+                @foreach (var r in recipients) { <option value="@r.Value">@r.Text</option> }
+            </select>
+        </div>
+        <div class="field"><label>Note (optional)</label><input class="input" name="note" /></div>
+    </div>
+    <button class="btn btn-primary btn-lg" type="submit">Import &amp; create batch</button>
+</form>

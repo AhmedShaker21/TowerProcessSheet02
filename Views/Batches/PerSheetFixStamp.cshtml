@@ -1,0 +1,461 @@
+@using TowerProcessSheet.Services
+@model TowerProcessSheet.Models.ProcessSheet
+@{
+    ViewData["Title"] = "Fix stamp";
+    var mine = ViewBag.Mine as List<TowerProcessSheet.Models.StampPlacement> ?? new();
+    bool isOverride = ViewBag.IsOverride ?? false;
+    bool isQualityReview = ViewBag.IsQualityReview ?? false;
+    var myLatestReview = ViewBag.MyLatestReview as TowerProcessSheet.Models.SheetReview;
+    var ci = System.Globalization.CultureInfo.InvariantCulture;
+    bool hasAnyDrawing = (Model.FullDrawingImage != null && Model.FullDrawingImage.Length > 0)
+        || (Model.DiagramImage != null && Model.DiagramImage.Length > 0);
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@(isQualityReview ? T("fs_review") : T("fs_fix_stamp")) — <span class="mono">@Model.PartNo</span> <span class="muted">@Model.Section</span></h1>
+    @if (ViewBag.PartListProjectId != null)
+    {
+        <a class="btn btn-primary" style="margin-inline-end:8px" asp-action="PartList" asp-route-projectId="@ViewBag.PartListProjectId" target="_blank">@T("pl_open_ref")</a>
+        <a class="btn" style="margin-inline-end:8px" asp-action="PartListStatus" asp-route-projectId="@ViewBag.PartListProjectId" asp-route-q="@Model.PartNo" target="_blank">@T("plc_link")</a>
+    }
+    @if (isQualityReview)
+    {
+        <a class="btn" asp-action="QualityInbox">@T("cancel")</a>
+    }
+    else
+    {
+        if (Model.BatchId.HasValue)
+        {
+            <a class="btn" asp-controller="Batches" asp-action="Details" asp-route-id="@Model.BatchId">@T("cancel")</a>
+        }
+        else
+        {
+            <a class="btn" asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@Model.Id">@T("cancel")</a>
+        }
+    }
+</div>
+
+@{
+    bool wasResent = ViewBag.WasResent ?? false;
+}
+@if (wasResent)
+{
+    <div class="flash flash-ok">
+        @T("fs_resent_msg")
+    </div>
+}
+else if (myLatestReview != null)
+{
+    <div class="flash @(myLatestReview.Decision == TowerProcessSheet.Models.ReviewDecision.Accepted ? "flash-ok" : "flash-err")">
+        @(myLatestReview.Decision == TowerProcessSheet.Models.ReviewDecision.Accepted ? T("fs_already_reviewed1") : T("fs_already_rejected1"))@(string.IsNullOrWhiteSpace(myLatestReview.Comment) ? "" : $": {myLatestReview.Comment}"). @T("fs_submit_again")
+    </div>
+}
+
+<div class="flash flash-ok">
+    @T("fs_adjust_hint")
+    @if (isOverride)
+    {
+        <span> @T("fs_has_override")</span>
+    }
+    else
+    {
+
+        <span> @T("fs_shared_position")</span>
+    }
+</div>
+
+<div class="place-toolbar no-print">
+    <button type="button" id="addImg" class="btn btn-primary">@T("fs_add_stamp")</button>
+    @if (isQualityReview)
+    {
+        <button type="button" id="drawToggle" class="btn btn-sm">@T("fs_markup_off")</button>
+        <button type="button" id="drawClear" class="btn btn-sm">@T("fs_clear_marks")</button>
+    }
+    <span class="muted no-print" id="noSelection" style="margin-inline-start:auto">@T("fs_click_stamp_hint")</span>
+</div>
+
+<form asp-action="@(isQualityReview ? "QualityDecide" : "PerSheetFixStamp")" asp-route-sheetId="@Model.Id" method="post" id="placeForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="placements" id="placementsInput" />
+    @if (isQualityReview)
+    {
+        <input type="hidden" name="annotation" id="annotationInput" />
+    }
+
+    <div class="@(isQualityReview ? "review-split" : "")">
+        <div class="@(isQualityReview ? "review-pane review-pane-sheet" : "")">
+            @if (isQualityReview)
+            {
+                <div class="review-pane-title">@T("fs_process_sheet_title")</div>
+            }
+            <div class="annotate-wrap" id="sampleWrap">
+                @await Html.PartialAsync("_RouteCard", Model)
+                @foreach (var p in mine)
+                {
+                    if (p.Image != null && p.Image.Length > 0)
+                    {
+                        string xProp = p.AnchorRight ? "right" : "left";
+                        string yProp = p.AnchorBottom ? "bottom" : "top";
+                        bool hasTextAnchor = !string.IsNullOrWhiteSpace(p.AnchorText);
+                        <div class="place-item"
+                             data-anchor-x="@(p.AnchorRight ? "right" : "left")" data-anchor-y="@(p.AnchorBottom ? "bottom" : "top")"
+                             data-pad-x="@((p.NormX * 100).ToString(ci))" data-pad-y="@((p.NormY * 100).ToString(ci))"
+                             data-anchor-text="@(hasTextAnchor ? p.AnchorText : null)"
+                             data-offset-x="@(p.OffsetXPx.ToString(ci))" data-offset-y="@(p.OffsetYPx.ToString(ci))"
+                             style="@xProp:@((p.NormX * 100).ToString(ci))%;@yProp:@((p.NormY * 100).ToString(ci))%;width:@(p.WidthPct.ToString(ci))%">
+                            <button type="button" class="rm">×</button>
+                            <img src="data:@(p.Mime ?? "image/png");base64,@Convert.ToBase64String(p.Image)" alt="stamp" />
+                        </div>
+                    }
+                }
+                @if (isQualityReview)
+                {
+                    <canvas id="annCanvas" class="annotate-canvas"></canvas>
+                }
+            </div>
+        </div>
+
+        @if (isQualityReview)
+        {
+            <div class="review-pane review-pane-drawing">
+                <div class="review-pane-title-row">
+                    <div class="review-pane-title">@T("fs_drawing_title")</div>
+                    @if (hasAnyDrawing)
+                    {
+                        <a class="btn btn-sm btn-primary" asp-controller="ProcessSheets" asp-action="FullDrawing" asp-route-id="@Model.Id" target="_blank">@T("fs_open_full")</a>
+                    }
+                </div>
+                @if (Model.FullDrawingImage != null && Model.FullDrawingImage.Length > 0)
+                {
+                    <div class="drawing-zoom-wrap">
+                        <img class="drawing-zoom-img" id="drawingZoomImg"
+                             src="@Url.Action("FullDrawingImage", "ProcessSheets", new { id = Model.Id })" alt="Drawing @Model.DrawingNo" />
+                    </div>
+                    <div class="drawing-zoom-controls no-print">
+                        <label>@T("fs_zoom") <input type="range" id="drawingZoomRange" min="50" max="300" value="100" step="10" /></label>
+                    </div>
+                }
+                else if (Model.DiagramImage != null && Model.DiagramImage.Length > 0)
+                {
+                    <div class="drawing-zoom-wrap">
+                        <img class="drawing-zoom-img" id="drawingZoomImg"
+                             src="data:@(Model.DiagramMime ?? "image/png");base64,@Convert.ToBase64String(Model.DiagramImage)" alt="Drawing @Model.DrawingNo" />
+                    </div>
+                    <div class="drawing-zoom-controls no-print">
+                        <label>@T("fs_zoom") <input type="range" id="drawingZoomRange" min="50" max="300" value="100" step="10" /></label>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty">@T("fs_no_drawing")</div>
+                }
+            </div>
+        }
+    </div>
+
+    @if (isQualityReview)
+    {
+        <div class="review-bar no-print">
+            <textarea class="input reject-reason" name="comment" placeholder="@T("fs_note_placeholder")">@myLatestReview?.Comment</textarea>
+            <div class="review-actions">
+                <button class="btn btn-danger" type="submit" name="decision" value="Reject">@T("fs_reject_btn")</button>
+                <button class="btn btn-primary btn-lg" type="submit" name="decision" value="Accept">@T("fs_accept_stamp")</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="step-actions no-print" style="margin-top:16px">
+            <button type="button" id="savePlace" class="btn btn-primary btn-lg">@T("fs_save_sheet")</button>
+        </div>
+    }
+</form>
+
+@section Scripts {
+    <script>
+        (function () {
+          var wrap = document.querySelector('#sampleWrap .route-card-wrapper') || document.getElementById('sampleWrap');
+          var noSelection = document.getElementById('noSelection');
+          var stampSrc = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.MyStamp as string));
+          var activeItem = null;
+          var MAX_DIM = 900;
+          var isQualityReview = @Html.Raw(isQualityReview ? "true" : "false");
+          var L = {
+            dragResize: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("fs_drag_resize"))),
+            markupOn: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("fs_markup_on"))),
+            markupOff: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("fs_markup_off")))
+          };
+
+          function capImage(src, cb) {
+            var img = new Image();
+            img.onload = function () {
+              var scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+              var w = Math.max(1, Math.round(img.naturalWidth * scale));
+              var h = Math.max(1, Math.round(img.naturalHeight * scale));
+              var c = document.createElement('canvas'); c.width = w; c.height = h;
+              c.getContext('2d').drawImage(img, 0, 0, w, h);
+              cb(c.toDataURL('image/png'));
+            };
+            img.onerror = function () { cb(src); };
+            img.src = src;
+          }
+
+          function findTextRectLocal(root, phrase) {
+            var target = (phrase || '').trim().toLowerCase();
+            if (!target) return null;
+            var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+            var node;
+            while ((node = walker.nextNode())) {
+              var text = node.textContent || '';
+              var idx = text.toLowerCase().indexOf(target);
+              if (idx === -1) continue;
+              try {
+                var range = document.createRange();
+                range.setStart(node, idx);
+                range.setEnd(node, Math.min(idx + target.length, text.length));
+                var rect = range.getBoundingClientRect();
+                if (rect && (rect.width || rect.height)) return rect;
+              } catch (e) { }
+            }
+            return null;
+          }
+
+          function findNearestWord(pointX, pointY) {
+            var walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, null);
+            var node, best = null, bestDist = Infinity;
+            while ((node = walker.nextNode())) {
+              var text = node.textContent || '';
+              var re = /\S+/g, m;
+              while ((m = re.exec(text))) {
+                try {
+                  var range = document.createRange();
+                  range.setStart(node, m.index);
+                  range.setEnd(node, m.index + m[0].length);
+                  var rect = range.getBoundingClientRect();
+                  if (!rect || (!rect.width && !rect.height)) continue;
+                  var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+                  var d = Math.hypot(cx - pointX, cy - pointY);
+                  if (d < bestDist) { bestDist = d; best = { text: m[0], rect: rect, dist: d }; }
+                } catch (e) { }
+              }
+            }
+            return best;
+          }
+
+          function autoAnchor(el) {
+            var b = el.getBoundingClientRect();
+            var wrapRect = wrap.getBoundingClientRect();
+            var found = findNearestWord(b.left, b.top);
+            var NEAR_ENOUGH_PX = 120;
+            if (found && found.dist <= NEAR_ENOUGH_PX) {
+              el.dataset.anchorText = found.text.slice(0, 60);
+              el.dataset.offsetX = Math.round(b.left - found.rect.right);
+              el.dataset.offsetY = Math.round(b.top - found.rect.top);
+            } else {
+              delete el.dataset.anchorText;
+            }
+            el.dataset.anchorX = 'left'; el.dataset.anchorY = 'top';
+            el.dataset.padX = (Math.max(0, (b.left - wrapRect.left) / wrapRect.width) * 100).toFixed(1);
+            el.dataset.padY = (Math.max(0, (b.top - wrapRect.top) / wrapRect.height) * 100).toFixed(1);
+            applyStyle(el);
+          }
+
+          function applyStyle(el) {
+            if (el.dataset.anchorText) {
+              var rect = findTextRectLocal(wrap, el.dataset.anchorText);
+              if (rect) {
+                var wrapRect = wrap.getBoundingClientRect();
+                var dx = parseFloat(el.dataset.offsetX) || 0, dy = parseFloat(el.dataset.offsetY) || 0;
+                el.style.left = (rect.right - wrapRect.left + dx) + 'px';
+                el.style.top = (rect.top - wrapRect.top + dy) + 'px';
+                el.style.right = 'auto'; el.style.bottom = 'auto';
+                return;
+              }
+            }
+            var ax = el.dataset.anchorX || 'left', ay = el.dataset.anchorY || 'top';
+            var px = parseFloat(el.dataset.padX) || 0, py = parseFloat(el.dataset.padY) || 0;
+            el.style.left = ''; el.style.right = ''; el.style.top = ''; el.style.bottom = '';
+            el.style[ax] = px + '%';
+            el.style[ay] = py + '%';
+          }
+
+          function selectItem(el) {
+            if (activeItem) activeItem.classList.remove('place-item-active');
+            activeItem = el;
+            if (!el) { if (noSelection) noSelection.style.display = ''; return; }
+            el.classList.add('place-item-active');
+            if (noSelection) noSelection.style.display = 'none';
+          }
+
+          function enableDrag(el) {
+            var dragging = false, moved = false;
+            el.addEventListener('pointerdown', function (e) {
+              if (e.target.classList.contains('rm') || e.target.classList.contains('resize-handle')) return;
+              dragging = true; moved = false; el.setPointerCapture(e.pointerId); e.preventDefault();
+            });
+            el.addEventListener('pointermove', function (e) {
+              if (!dragging) return;
+              moved = true;
+              var r = wrap.getBoundingClientRect();
+              var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+              var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+              el.dataset.anchorX = 'left'; el.dataset.anchorY = 'top';
+              el.dataset.padX = (x * 100).toFixed(1);
+              el.dataset.padY = (y * 100).toFixed(1);
+              delete el.dataset.anchorText;
+              applyStyle(el);
+            });
+            el.addEventListener('pointerup', function () {
+              dragging = false;
+              if (moved) autoAnchor(el); else selectItem(el);
+            });
+
+            var handle = el.querySelector('.resize-handle');
+            if (handle) {
+              var resizing = false, startX = 0, startW = 0;
+              handle.addEventListener('pointerdown', function (e) {
+                resizing = true; startX = e.clientX; startW = el.getBoundingClientRect().width;
+                handle.setPointerCapture(e.pointerId); e.stopPropagation(); e.preventDefault();
+                selectItem(el);
+              });
+              handle.addEventListener('pointermove', function (e) {
+                if (!resizing) return;
+                var r = wrap.getBoundingClientRect();
+                var newWpx = Math.max(20, startW + (e.clientX - startX));
+                var pct = Math.min(60, Math.max(3, (newWpx / r.width) * 100));
+                el.style.width = pct + '%';
+              });
+              handle.addEventListener('pointerup', function (e) {
+                if (!resizing) return;
+                resizing = false;
+                autoAnchor(el);
+                e.stopPropagation();
+              });
+            }
+          }
+
+          function addItem(type, src) {
+            var el = document.createElement('div');
+            el.className = 'place-item';
+            el.dataset.type = type;
+            el.style.width = '16%';
+            el.innerHTML = '<button type="button" class="rm">×</button><img><span class="resize-handle" title="' + L.dragResize + '"></span>';
+            el.querySelector('img').src = src;
+            el.querySelector('.rm').addEventListener('click', function () {
+              if (activeItem === el) selectItem(null);
+              el.remove();
+            });
+            wrap.appendChild(el);
+            el.dataset.anchorX = 'left'; el.dataset.anchorY = 'top';
+            el.dataset.padX = '70'; el.dataset.padY = '85';
+            applyStyle(el);
+            enableDrag(el);
+            autoAnchor(el);
+            selectItem(el);
+            return el;
+          }
+
+          if (document.getElementById('addImg'))
+            document.getElementById('addImg').addEventListener('click', function () {
+              if (stampSrc) capImage(stampSrc, function (u) { addItem('stamp', u); });
+            });
+
+          document.querySelectorAll('#sampleWrap .place-item').forEach(function (el) {
+            if (!el.querySelector('.resize-handle')) {
+              var h = document.createElement('span');
+              h.className = 'resize-handle'; h.title = L.dragResize;
+              el.appendChild(h);
+            }
+            el.querySelector('.rm').addEventListener('click', function () {
+              if (activeItem === el) selectItem(null);
+              el.remove();
+            });
+            enableDrag(el);
+            if (el.dataset.anchorText) applyStyle(el);
+          });
+          selectItem(null);
+
+          function collectPlacements() {
+            var items = [];
+            document.querySelectorAll('#sampleWrap .place-item').forEach(function (el) {
+              items.push({
+                x: (parseFloat(el.dataset.padX) || 0) / 100,
+                y: (parseFloat(el.dataset.padY) || 0) / 100,
+                w: parseFloat(el.style.width) || 16,
+                ax: el.dataset.anchorX || 'left', ay: el.dataset.anchorY || 'top',
+                text: el.dataset.anchorText || '',
+                dx: parseFloat(el.dataset.offsetX) || 0,
+                dy: parseFloat(el.dataset.offsetY) || 0,
+                img: el.querySelector('img').src
+              });
+            });
+            document.getElementById('placementsInput').value = JSON.stringify(items);
+          }
+
+          if (!isQualityReview) {
+            document.getElementById('savePlace').addEventListener('click', function () {
+              collectPlacements();
+              document.getElementById('placeForm').submit();
+            });
+            return;
+          }
+
+          // ---- Quality-only: mark-up canvas + zoom + accept/reject wiring ----
+          var canvas = document.getElementById('annCanvas');
+          var toggle = document.getElementById('drawToggle');
+          var clearBtn = document.getElementById('drawClear');
+          var annInput = document.getElementById('annotationInput');
+          var ctx = canvas.getContext('2d');
+          var drawing = false, active = false, hasDrawingMark = false, last = null;
+
+          function sizeCanvas() {
+            var prev = hasDrawingMark ? canvas.toDataURL() : null;
+            canvas.width = wrap.parentElement.scrollWidth;
+            canvas.height = wrap.parentElement.scrollHeight;
+            ctx.strokeStyle = '#e11';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            if (prev) { var img = new Image(); img.onload = function () { ctx.drawImage(img, 0, 0); }; img.src = prev; }
+          }
+          setTimeout(sizeCanvas, 60);
+          window.addEventListener('resize', sizeCanvas);
+
+          var zoomImg = document.getElementById('drawingZoomImg');
+          var zoomRange = document.getElementById('drawingZoomRange');
+          if (zoomImg && zoomRange) {
+            zoomRange.addEventListener('input', function () { zoomImg.style.width = zoomRange.value + '%'; });
+          }
+
+          toggle.addEventListener('click', function () {
+            active = !active;
+            toggle.textContent = active ? L.markupOn : L.markupOff;
+            toggle.classList.toggle('btn-primary', active);
+            canvas.style.pointerEvents = active ? 'auto' : 'none';
+            canvas.style.cursor = active ? 'crosshair' : 'default';
+          });
+          clearBtn.addEventListener('click', function () {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hasDrawingMark = false; annInput.value = '';
+          });
+
+          function pos(e) {
+            var r = canvas.getBoundingClientRect();
+            return { x: e.clientX - r.left, y: e.clientY - r.top };
+          }
+          canvas.addEventListener('pointerdown', function (e) { if (!active) return; drawing = true; last = pos(e); });
+          canvas.addEventListener('pointermove', function (e) {
+            if (!active || !drawing) return;
+            var p = pos(e);
+            ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+            last = p; hasDrawingMark = true;
+          });
+          window.addEventListener('pointerup', function () { drawing = false; });
+
+          document.getElementById('placeForm').addEventListener('submit', function (e) {
+            collectPlacements();
+            if (hasDrawingMark) annInput.value = canvas.toDataURL('image/png');
+          });
+        })();
+    </script>
+}

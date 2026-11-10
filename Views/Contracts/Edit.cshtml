@@ -1,0 +1,55 @@
+@model TowerProcessSheet.Models.Contract
+@{
+    ViewData["Title"] = $"Contract {Model.ContractNo}";
+    var candidates = ViewBag.Candidates as List<TowerProcessSheet.Models.Batch> ?? new();
+}
+<div class="page-head no-print">
+    <h1>Contract @Model.ContractNo</h1>
+    <a class="btn" asp-action="Index">Back</a>
+</div>
+
+<form class="card" asp-action="Edit" asp-route-id="@Model.Id" method="post">
+    @Html.AntiForgeryToken()
+    <p class="muted">Contract No, Work Order and the quantity multiplier below are written onto <strong>every sheet in every batch</strong> attached to this contract. Total Qty per sheet = that sheet's Qty × the multiplier.</p>
+
+    <div class="grid-2">
+        <div class="field"><label>Contract No</label><input class="input" name="contractNo" value="@Model.ContractNo" /></div>
+        <div class="field"><label>Work Order No</label><input class="input" name="workOrderNo" value="@Model.WorkOrderNo" /></div>
+    </div>
+    <div class="grid-2">
+        <div class="field"><label>Project</label><input class="input" name="projectName" value="@Model.ProjectName" /></div>
+        <div class="field"><label>Quantity multiplier</label><input class="input" type="number" min="1" name="qtyMultiplier" value="@Model.QtyMultiplier" /></div>
+    </div>
+
+    <fieldset class="sub">
+        <legend>Batches in this contract</legend>
+        @if (candidates.Count == 0)
+        {
+            <p class="muted">No batches available to attach.</p>
+        }
+        else
+        {
+            <table class="list-table">
+                <thead><tr><th></th><th>Batch</th><th>Project</th><th>Status</th><th>Now with</th><th class="actions-col"></th></tr></thead>
+                <tbody>
+                @foreach (var b in candidates)
+                {
+                    <tr>
+                        <td><input type="checkbox" name="batchIds" value="@b.Id" checked="@(b.ContractId == Model.Id)" /></td>
+                        <td><strong>@b.Name</strong></td>
+                        <td>@b.ProjectName</td>
+                        <td><span class="chip @(b.Status == TowerProcessSheet.Models.BatchStatus.Approved ? "chip-galv" : "chip-angle")">@b.Status</span></td>
+                        <td>@(b.CurrentHolder?.FullName ?? "—")</td>
+                        <td class="actions-col">
+                            <a class="btn btn-sm" asp-controller="Batches" asp-action="Details" asp-route-id="@b.Id">View</a>
+                            <a class="btn btn-sm" asp-controller="Batches" asp-action="Export" asp-route-id="@b.Id" target="_blank">Sealed / PDF</a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </fieldset>
+
+    <button class="btn btn-primary" type="submit">Save &amp; apply to all sheets</button>
+</form>

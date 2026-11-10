@@ -1,0 +1,54 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model TowerProcessSheet.Models.Batch
+@{
+    ViewData["Title"] = $"Edit batch {Model.Name}";
+    var planners = ViewBag.Planners as List<SelectListItem> ?? new();
+}
+<div class="page-head no-print">
+    <h1>Batch details — @Model.Name</h1>
+    <a class="btn" asp-action="Details" asp-route-id="@Model.Id">Back</a>
+</div>
+
+<form class="card" asp-action="EditDetails" asp-route-id="@Model.Id" method="post">
+    @Html.AntiForgeryToken()
+    <p class="muted">Entered once here and written onto <strong>every sheet</strong> in the batch. Total Qty per sheet = that sheet's Qty × the multiplier. Complied-by / Checked / Approved come from signatures, and the footer Date is set when you send.</p>
+
+    <fieldset class="sub">
+        <legend>Contract &amp; quantity</legend>
+        <div class="grid-3">
+            <div class="field"><label>Contract No (e.g. 18/26)</label><input class="input" name="contractNo" value="@Model.ContractNo" /></div>
+            <div class="field"><label>Work Order No (required if Contract set)</label><input class="input" name="workOrderNo" value="@Model.WorkOrderNo" /></div>
+            <div class="field"><label>Qty multiplier (how many to produce)</label><input class="input" type="number" min="1" name="qtyMultiplier" value="@Model.QtyMultiplier" /></div>
+        </div>
+    </fieldset>
+
+    <fieldset class="sub">
+        <legend>Header / footer values</legend>
+        <div class="grid-3">
+            <div class="field"><label>Ass'd On</label><input class="input" name="assembledOn" value="@Model.AssembledOn" /></div>
+            <div class="field"><label>Quality Insp.</label><input class="input" name="qualityInsp" value="@Model.QualityInsp" /></div>
+            <div class="field"><label>Sheet No.</label><input class="input" name="sheetNo" value="@(Model.SheetNo ?? "1/1")" /></div>
+            <div class="field"><label>Written By</label><input class="input" name="writtenBy" value="@Model.WrittenBy" /></div>
+            <div class="field"><label>No. of sheets</label><input class="input" name="noOfSheets" value="@(Model.NoOfSheets ?? "1")" /></div>
+            <div class="field"><label>Process Sheet Issue</label><input class="input" name="processSheetIssue" value="@(Model.ProcessSheetIssue ?? "1")" /></div>
+            <div class="field"><label>Drawing Issue</label><input class="input" name="drawingIssue" value="@(Model.DrawingIssue ?? "1")" /></div>
+            <div class="field"><label>Document ref.</label><input class="input" name="docRef" value="@(Model.DocRef ?? "E/206/401/ن")" /></div>
+        </div>
+    </fieldset>
+
+    <fieldset class="sub">
+        <legend>Checked by (planning signature, optional)</legend>
+        <div class="field">
+            <select class="input" name="checkedById">
+                <option value="">— none —</option>
+                @foreach (var p in planners)
+                {
+                    <option value="@p.Value" selected="@(p.Value == Model.CheckedById?.ToString())">@p.Text</option>
+                }
+            </select>
+        </div>
+    </fieldset>
+
+    <button class="btn btn-primary" type="submit">Save &amp; apply to all sheets</button>
+    <a class="btn" asp-action="Details" asp-route-id="@Model.Id">Cancel</a>
+</form>

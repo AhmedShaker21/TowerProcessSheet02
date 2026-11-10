@@ -1,0 +1,414 @@
+@model TowerProcessSheet.Models.ProcessSheet
+@{
+    ViewData["Title"] = "Place stamps";
+    var batch = ViewBag.Batch as TowerProcessSheet.Models.Batch;
+    var myStamp = ViewBag.MyStamp as string;
+    var mySignatures = ViewBag.MySignatures as List<TowerProcessSheet.Controllers.BatchesController.SignaturePickerItem> ?? new();
+    var stampFields = ViewBag.StampFields as string;
+    var sector = ViewBag.Sector as string ?? "";
+    var code = ViewBag.Code as string ?? "";
+    var mine = ViewBag.Mine as List<TowerProcessSheet.Models.StampPlacement> ?? new();
+    var ci = System.Globalization.CultureInfo.InvariantCulture;
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>Place your stamp — <span class="mono">@batch?.Name</span></h1>
+    <a class="btn" asp-action="Details" asp-route-id="@batch!.Id">Cancel</a>
+</div>
+
+<div class="flash flash-ok">
+    Add a stamp or signature, then just <strong>drag it into place</strong> and drag its corner to resize.
+    It automatically stays that same distance from the nearest word on every sheet — even when sheets differ in length.
+    <strong>Save &amp; apply to all</strong> copies it to every sheet.
+</div>
+
+<div class="place-toolbar no-print">
+    @if (myStamp != null)
+    {
+        <button type="button" id="addImg" class="btn btn-primary">@T("place_stampbtn")</button>
+    }
+    @foreach (var sig in mySignatures)
+    {
+        <button type="button" class="btn btn-primary btn-sig" data-sig-src="@sig.DataUrl">✍ @sig.Label</button>
+    }
+    <button type="button" id="addDc" class="btn btn-primary">@T("place_dc")</button>
+    <label>Stamp color <input type="color" id="dcColor" value="#e11111" style="width:44px;padding:2px" /></label>
+    <label>Copy No. <input class="input" id="copyInput" value="@code" style="width:110px" /></label>
+    <label>Issue <input class="input" id="issueInput" placeholder="1" style="width:80px" /></label>
+    <label class="chk"><input type="checkbox" id="autoDate" checked /> Auto date</label>
+    <label id="dateWrap" class="hidden">Date <input type="date" class="input" id="dateInput" /></label>
+    <span class="muted no-print" id="noSelection" style="margin-inline-start:auto">Click a stamp to select it, then drag to move or drag its corner to resize.</span>
+    <button type="button" id="savePlace" class="btn btn-primary btn-lg">Save &amp; apply to all</button>
+</div>
+
+<form asp-action="PlaceStamps" asp-route-id="@batch!.Id" method="post" id="placeForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="placements" id="placementsInput" />
+</form>
+
+<div class="annotate-wrap" id="sampleWrap">
+    @await Html.PartialAsync("_RouteCard", Model)
+    @foreach (var p in mine)
+    {
+        if (p.Image != null && p.Image.Length > 0)
+        {
+            string xProp = p.AnchorRight ? "right" : "left";
+            string yProp = p.AnchorBottom ? "bottom" : "top";
+            bool hasTextAnchor = !string.IsNullOrWhiteSpace(p.AnchorText);
+            <div class="place-item"
+                 data-anchor-x="@(p.AnchorRight ? "right" : "left")" data-anchor-y="@(p.AnchorBottom ? "bottom" : "top")"
+                 data-pad-x="@((p.NormX*100).ToString(ci))" data-pad-y="@((p.NormY*100).ToString(ci))"
+                 data-anchor-text="@(hasTextAnchor ? p.AnchorText : null)"
+                 data-offset-x="@(p.OffsetXPx.ToString(ci))" data-offset-y="@(p.OffsetYPx.ToString(ci))"
+                 style="@xProp:@((p.NormX*100).ToString(ci))%;@yProp:@((p.NormY*100).ToString(ci))%;width:@(p.WidthPct.ToString(ci))%">
+                <button type="button" class="rm">×</button>
+                <img src="data:@(p.Mime ?? "image/png");base64,@Convert.ToBase64String(p.Image)" alt="stamp" />
+            </div>
+        }
+    }
+</div>
+
+@section Scripts {
+<script>
+(function () {
+  // Use the SAME element the final saved stamp positions itself against
+  // (.route-card-wrapper), not the outer padded card — otherwise the two
+  // reference frames differ by the card's own padding and every stamp
+  // drifts a little once saved.
+  var wrap = document.querySelector('#sampleWrap .route-card-wrapper') || document.getElementById('sampleWrap');
+  var copy = document.getElementById('copyInput');
+  var dcColor = document.getElementById('dcColor');
+  var issue = document.getElementById('issueInput');
+  var autoDate = document.getElementById('autoDate');
+  var dateWrap = document.getElementById('dateWrap');
+  var dateInput = document.getElementById('dateInput');
+  var noSelection = document.getElementById('noSelection');
+  var stampSrc = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(myStamp));
+  var sector = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(sector));
+  var fieldsRaw = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(stampFields));
+  var cfg = null; try { cfg = fieldsRaw ? JSON.parse(fieldsRaw) : null; } catch(e) { cfg = null; }
+
+  // Default corner for newly added stamps (bottom-right, like the Document-Control sample).
+  var defaultAnchor = { x: 'right', y: 'bottom' };
+  var activeItem = null;
+  var MAX_DIM = 900;
+
+  // ---- image capping (unchanged logic, kept small) ----
+  var stampImg = null, stampReady = false, stampW = 0, stampH = 0;
+  var hasExistingPlacements = @Html.Raw(mine.Count > 0 ? "true" : "false");
+  var autoStampAdded = false;
+  function maybeAutoAddStamp() {
+    // First time here (nothing placed yet) — stick the stamp on right away instead of
+    // making them click "Add my stamp" first; they just drag/fix it into place. Only
+    // fires once the stamp image (and any baked-in Issue/Copy/Date text) is actually
+    // ready — adding it any earlier would grab the raw, unfilled stamp image instead.
+    if (hasExistingPlacements || autoStampAdded || !stampSrc) return;
+    autoStampAdded = true;
+    addItem('stampf', filledStampUrl());
+  }
+  if (stampSrc) {
+    stampImg = new Image();
+    stampImg.onload = function () {
+      var scale = Math.min(1, MAX_DIM / Math.max(stampImg.naturalWidth, stampImg.naturalHeight));
+      stampW = Math.max(1, Math.round(stampImg.naturalWidth * scale));
+      stampH = Math.max(1, Math.round(stampImg.naturalHeight * scale));
+      stampReady = true;
+      refreshFilled();
+      maybeAutoAddStamp();
+    };
+    stampImg.src = stampSrc;
+  }
+  function capImage(src, cb) {
+    var img = new Image();
+    img.onload = function () {
+      var scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+      var w = Math.max(1, Math.round(img.naturalWidth * scale));
+      var h = Math.max(1, Math.round(img.naturalHeight * scale));
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(c.toDataURL('image/png'));
+    };
+    img.onerror = function () { cb(src); };
+    img.src = src;
+  }
+  function fmt(d){ return d.getDate() + '/ ' + (d.getMonth()+1) + ' / ' + d.getFullYear(); }
+  function currentDate(){
+    if (autoDate.checked || !dateInput.value) return fmt(new Date());
+    var p = dateInput.value.split('-');
+    return parseInt(p[2],10) + '/ ' + parseInt(p[1],10) + ' / ' + p[0];
+  }
+  function esc(s){ return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function filledStampUrl(){
+    if (!stampReady) return stampSrc;
+    if (!cfg || !cfg.hasFields) return capStampCache || stampSrc;
+    var w = stampW, h = stampH;
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var ctx = c.getContext('2d');
+    ctx.drawImage(stampImg, 0, 0, w, h);
+    ctx.fillStyle = '#1746c7';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var fs = Math.max(8, (cfg.size || 8) / 100 * w);
+    ctx.font = '700 ' + fs + 'px Arial';
+    var vals = { date: currentDate(), issue: issue.value || '', copy: copy.value || '' };
+    (cfg.fields || []).forEach(function(f){
+      var v = vals[f.k]; if (!v) return;
+      ctx.fillText(v, f.x * w, f.y * h);
+    });
+    return c.toDataURL('image/png');
+  }
+  var capStampCache = null;
+  if (stampSrc) { capImage(stampSrc, function (u) { capStampCache = u; refreshFilled(); }); }
+
+  function dcDataUrl() {
+    var w = 520, h = 200;
+    var mainColor = dcColor.value || '#e11';
+    var svg =
+      "<svg xmlns='http://www.w3.org/2000/svg' width='" + w + "' height='" + h + "' viewBox='0 0 " + w + " " + h + "'>" +
+      "<rect x='6' y='6' width='" + (w-12) + "' height='" + (h-12) + "' fill='rgba(255,255,255,0.28)' stroke='" + mainColor + "' stroke-width='7'/>" +
+      "<text x='" + (w/2) + "' y='48' text-anchor='middle' font-family='Arial' font-weight='bold' font-size='34' fill='" + mainColor + "'>Document Control</text>" +
+      "<text x='" + (w/2) + "' y='86' text-anchor='middle' font-family='Arial' font-weight='bold' font-size='27' fill='" + mainColor + "'>" + esc(sector) + "</text>" +
+      "<text x='" + (w/2) + "' y='130' text-anchor='middle' font-family='Arial' font-weight='bold' font-size='21' fill='" + mainColor + "'>Date : <tspan fill='#1746c7'>" + esc(currentDate()) + "</tspan>   Issue: <tspan fill='#1746c7'>" + esc(issue.value) + "</tspan></text>" +
+      "<text x='" + (w/2) + "' y='168' text-anchor='middle' font-family='Arial' font-weight='bold' font-size='21' fill='" + mainColor + "'>Copy No. : <tspan fill='#1746c7'>" + esc(copy.value) + "</tspan></text>" +
+      "</svg>";
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+  }
+
+  // Finds a phrase inside the sample sheet and returns its on-screen rect (same
+  // technique the final saved render uses, kept local so this page's live preview
+  // matches exactly what will happen once saved).
+  function findTextRectLocal(root, phrase) {
+    var target = (phrase || '').trim().toLowerCase();
+    if (!target) return null;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var node;
+    while ((node = walker.nextNode())) {
+      var text = node.textContent || '';
+      var idx = text.toLowerCase().indexOf(target);
+      if (idx === -1) continue;
+      try {
+        var range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, Math.min(idx + target.length, text.length));
+        var rect = range.getBoundingClientRect();
+        if (rect && (rect.width || rect.height)) return rect;
+      } catch (e) { /* try the next match */ }
+    }
+    return null;
+  }
+
+  // ---- automatic anchoring: find the nearest word and lock to it ----
+  // Walks every word on the sheet and returns the closest one to a given point.
+  function findNearestWord(pointX, pointY) {
+    var walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, null);
+    var node, best = null, bestDist = Infinity;
+    while ((node = walker.nextNode())) {
+      var text = node.textContent || '';
+      var re = /\S+/g, m;
+      while ((m = re.exec(text))) {
+        try {
+          var range = document.createRange();
+          range.setStart(node, m.index);
+          range.setEnd(node, m.index + m[0].length);
+          var rect = range.getBoundingClientRect();
+          if (!rect || (!rect.width && !rect.height)) continue;
+          var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+          var d = Math.hypot(cx - pointX, cy - pointY);
+          if (d < bestDist) { bestDist = d; best = { text: m[0], rect: rect, dist: d }; }
+        } catch (e) { /* skip this word */ }
+      }
+    }
+    return best;
+  }
+
+  // After every drag or resize, silently lock the stamp to whichever word ended up
+  // nearest it — this is what keeps it in the same visual spot on every sheet, even
+  // when sheets differ in length, with no extra step for the user.
+  function autoAnchor(el) {
+    var b = el.getBoundingClientRect();
+    var wrapRect = wrap.getBoundingClientRect();
+    var found = findNearestWord(b.left, b.top);
+    // A word more than ~120px away isn't actually near the stamp — anchoring to it
+    // anyway is what caused stamps dropped over the drawing/diagram (which usually has
+    // no text nearby) to jump to whatever word happened to be closest, even if that was
+    // all the way at the bottom of the page. Past this distance, just stay exactly where
+    // it was dropped (the plain corner-percentage position below) instead.
+    var NEAR_ENOUGH_PX = 120;
+    if (found && found.dist <= NEAR_ENOUGH_PX) {
+      el.dataset.anchorText = found.text.slice(0, 60);
+      el.dataset.offsetX = Math.round(b.left - found.rect.right);
+      el.dataset.offsetY = Math.round(b.top - found.rect.top);
+    } else {
+      delete el.dataset.anchorText;
+    }
+    // Corner fallback stays in sync too, for contexts without a layout engine (e.g. Excel export).
+    el.dataset.anchorX = 'left'; el.dataset.anchorY = 'top';
+    el.dataset.padX = (Math.max(0, (b.left - wrapRect.left) / wrapRect.width) * 100).toFixed(1);
+    el.dataset.padY = (Math.max(0, (b.top - wrapRect.top) / wrapRect.height) * 100).toFixed(1);
+    applyStyle(el);
+  }
+
+  // ---- anchor-aware positioning ----
+  function applyStyle(el) {
+    if (el.dataset.anchorText) {
+      var rect = findTextRectLocal(wrap, el.dataset.anchorText);
+      if (rect) {
+        var wrapRect = wrap.getBoundingClientRect();
+        var dx = parseFloat(el.dataset.offsetX) || 0, dy = parseFloat(el.dataset.offsetY) || 0;
+        el.style.left = (rect.right - wrapRect.left + dx) + 'px';
+        el.style.top = (rect.top - wrapRect.top + dy) + 'px';
+        el.style.right = 'auto'; el.style.bottom = 'auto';
+        return;
+      }
+      // Word not found on this preview — fall through to the corner fallback below.
+    }
+    var ax = el.dataset.anchorX || 'left', ay = el.dataset.anchorY || 'top';
+    var px = parseFloat(el.dataset.padX) || 0, py = parseFloat(el.dataset.padY) || 0;
+    el.style.left = ''; el.style.right = ''; el.style.top = ''; el.style.bottom = '';
+    el.style[ax] = px + '%';
+    el.style[ay] = py + '%';
+  }
+
+  function selectItem(el) {
+    if (activeItem) activeItem.classList.remove('place-item-active');
+    activeItem = el;
+    if (!el) {
+      if (noSelection) noSelection.style.display = '';
+      return;
+    }
+    el.classList.add('place-item-active');
+    if (noSelection) noSelection.style.display = 'none';
+  }
+
+  // ---- drag to move, drag the corner handle to resize — both re-anchor on release ----
+  function enableDrag(el) {
+    var dragging = false, moved = false;
+    el.addEventListener('pointerdown', function (e) {
+      if (e.target.classList.contains('rm') || e.target.classList.contains('resize-handle')) return;
+      dragging = true; moved = false; el.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    el.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      moved = true;
+      var r = wrap.getBoundingClientRect();
+      var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+      var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+      el.dataset.anchorX = 'left'; el.dataset.anchorY = 'top';
+      el.dataset.padX = (x * 100).toFixed(1);
+      el.dataset.padY = (y * 100).toFixed(1);
+      delete el.dataset.anchorText;   // dragging in progress — reapplied on release
+      applyStyle(el);
+    });
+    el.addEventListener('pointerup', function () {
+      dragging = false;
+      if (moved) autoAnchor(el); else selectItem(el);
+    });
+
+    var handle = el.querySelector('.resize-handle');
+    if (handle) {
+      var resizing = false, startX = 0, startW = 0;
+      handle.addEventListener('pointerdown', function (e) {
+        resizing = true; startX = e.clientX; startW = el.getBoundingClientRect().width;
+        handle.setPointerCapture(e.pointerId); e.stopPropagation(); e.preventDefault();
+        selectItem(el);
+      });
+      handle.addEventListener('pointermove', function (e) {
+        if (!resizing) return;
+        var r = wrap.getBoundingClientRect();
+        var newWpx = Math.max(20, startW + (e.clientX - startX));
+        var pct = Math.min(60, Math.max(3, (newWpx / r.width) * 100));
+        el.style.width = pct + '%';
+      });
+      handle.addEventListener('pointerup', function (e) {
+        if (!resizing) return;
+        resizing = false;
+        autoAnchor(el);
+        e.stopPropagation();
+      });
+    }
+  }
+
+  function addItem(type, src) {
+    var el = document.createElement('div');
+    el.className = 'place-item';
+    el.dataset.type = type;
+    el.style.width = '16%';
+    el.innerHTML = '<button type="button" class="rm">×</button><img><span class="resize-handle" title="Drag to resize"></span>';
+    el.querySelector('img').src = src;
+    el.querySelector('.rm').addEventListener('click', function () {
+      if (activeItem === el) selectItem(null);
+      el.remove();
+    });
+    wrap.appendChild(el);
+    // Default drop spot: bottom-right area of the sheet — then lock to the nearest word right away.
+    el.dataset.anchorX = 'left'; el.dataset.anchorY = 'top';
+    el.dataset.padX = '70'; el.dataset.padY = '85';
+    applyStyle(el);
+    enableDrag(el);
+    autoAnchor(el);
+    selectItem(el);
+    return el;
+  }
+
+  if (document.getElementById('addImg'))
+    document.getElementById('addImg').addEventListener('click', function () { if (stampSrc) addItem('stampf', filledStampUrl()); });
+  document.querySelectorAll('.btn-sig').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      capImage(btn.dataset.sigSrc, function (u) { addItem('sig', u); });
+    });
+  });
+  document.getElementById('addDc').addEventListener('click', function () { addItem('dc', dcDataUrl()); });
+
+  function refreshDc() {
+    document.querySelectorAll('#sampleWrap .place-item[data-type="dc"]').forEach(function (el) {
+      el.querySelector('img').src = dcDataUrl();
+    });
+  }
+  function refreshFilled() {
+    document.querySelectorAll('#sampleWrap .place-item[data-type="stampf"]').forEach(function (el) {
+      el.querySelector('img').src = filledStampUrl();
+    });
+  }
+  function refreshAll(){ refreshDc(); refreshFilled(); }
+  copy.addEventListener('input', refreshAll);
+  dcColor.addEventListener('input', refreshDc);
+  issue.addEventListener('input', refreshAll);
+  autoDate.addEventListener('change', function(){ dateWrap.classList.toggle('hidden', autoDate.checked); refreshAll(); });
+  dateInput.addEventListener('input', refreshAll);
+
+  // wire server-loaded items (existing saved placements)
+  document.querySelectorAll('#sampleWrap .place-item').forEach(function (el) {
+    if (!el.querySelector('.resize-handle')) {
+      var h = document.createElement('span');
+      h.className = 'resize-handle'; h.title = 'Drag to resize';
+      el.appendChild(h);
+    }
+    el.querySelector('.rm').addEventListener('click', function () {
+      if (activeItem === el) selectItem(null);
+      el.remove();
+    });
+    enableDrag(el);
+    if (el.dataset.anchorText) applyStyle(el);   // snap word-anchored items into place on load
+  });
+  selectItem(null);
+
+  document.getElementById('savePlace').addEventListener('click', function () {
+    var items = [];
+    document.querySelectorAll('#sampleWrap .place-item').forEach(function (el) {
+      items.push({
+        x: (parseFloat(el.dataset.padX) || 0) / 100,
+        y: (parseFloat(el.dataset.padY) || 0) / 100,
+        w: parseFloat(el.style.width) || 16,
+        ax: el.dataset.anchorX || 'left', ay: el.dataset.anchorY || 'top',
+        text: el.dataset.anchorText || '',
+        dx: parseFloat(el.dataset.offsetX) || 0,
+        dy: parseFloat(el.dataset.offsetY) || 0,
+        img: el.querySelector('img').src
+      });
+    });
+    document.getElementById('placementsInput').value = JSON.stringify(items);
+    document.getElementById('placeForm').submit();
+  });
+})();
+</script>
+}

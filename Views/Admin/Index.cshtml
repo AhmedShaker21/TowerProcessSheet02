@@ -1,0 +1,74 @@
+@model List<TowerProcessSheet.Models.Batch>
+@{
+    ViewData["Title"] = "Admin";
+    string T(string k) => Tr.S(Context, k);
+    var counts = ViewBag.Counts as Dictionary<int, int> ?? new();
+    var users = ViewBag.Users as List<TowerProcessSheet.Models.AppUser> ?? new();
+}
+<div class="page-head no-print">
+    <h1>@T("adm_title")</h1>
+    <div class="head-actions">
+        <a class="btn" asp-action="Departments">@T("adm_departments")</a>
+        <a class="btn" asp-action="Steps">@T("adm_steps")</a>
+        <a class="btn" asp-action="CostCenters">Cost Centers</a>
+        <a class="btn btn-primary" asp-controller="Users" asp-action="Index">@T("adm_manage_users")</a>
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-card anim-pop"><b>@ViewBag.UserCount</b><span>@T("adm_users")</span></div>
+    <div class="stat-card anim-pop"><b>@ViewBag.BatchCount</b><span>@T("adm_batches")</span></div>
+    <div class="stat-card anim-pop"><b>@ViewBag.SheetCount</b><span>@T("adm_sheets")</span></div>
+    <div class="stat-card anim-pop"><b>@ViewBag.ActiveCount</b><span>@T("adm_active")</span></div>
+    <div class="stat-card ok anim-pop"><b>@ViewBag.ApprovedCount</b><span>@T("st_Approved")</span></div>
+    <div class="stat-card bad anim-pop"><b>@ViewBag.RejectedSheets</b><span>@T("st_Rejected")</span></div>
+    @if (ViewBag.DbFileSizeMb != null)
+    {
+        <div class="stat-card anim-pop"><b>@ViewBag.DbFileSizeMb MB</b><span>@T("adm_db_size")</span></div>
+    }
+</div>
+
+@if (ViewBag.DbFileSizeMb != null)
+{
+    <div class="card" style="margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span class="hint" style="margin:0">@T("adm_vacuum_hint")</span>
+        <form asp-controller="Admin" asp-action="VacuumDatabase" method="post" style="margin-inline-start:auto"
+              onsubmit="return confirm(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("adm_vacuum_confirm"))))">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-sm" type="submit">@T("adm_vacuum_btn")</button>
+        </form>
+    </div>
+}
+
+<h2 class="section-h">@T("adm_batches")</h2>
+<table class="list-table">
+    <thead><tr><th>@T("adm_batches")</th><th>@T("adm_sheets")</th><th>@T("nav_pipeline")</th><th>@T("wall_with")</th><th></th></tr></thead>
+    <tbody>
+        @foreach (var b in Model)
+        {
+            <tr>
+                <td><strong>@b.Name</strong> <span class="muted">@b.ProjectName</span></td>
+                <td><span class="badge-count">@(counts.TryGetValue(b.Id, out var c) ? c : 0)</span></td>
+                <td><span class="chip chip-angle">@b.Status</span></td>
+                <td>@(b.CurrentHolder?.FullName ?? "—")</td>
+                <td class="actions-col"><a class="btn btn-sm" asp-controller="Batches" asp-action="Details" asp-route-id="@b.Id">@T("open")</a></td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h2 class="section-h">@T("adm_users")</h2>
+<table class="list-table">
+    <thead><tr><th>@T("name")</th><th>@T("adm_departments")</th><th>Role</th><th></th></tr></thead>
+    <tbody>
+        @foreach (var u in users)
+        {
+            <tr>
+                <td><strong>@u.FullName</strong> <span class="muted">(@u.Username)</span></td>
+                <td>@u.Department</td>
+                <td>@u.Slot @(u.IsAdmin ? "· Admin" : "") @(u.IsPlanner ? "· Planner" : "") @(u.IsDisplay ? "· Screen" : "")</td>
+                <td class="actions-col"><a class="btn btn-sm" asp-controller="Users" asp-action="Edit" asp-route-id="@u.Id">@T("open")</a></td>
+            </tr>
+        }
+    </tbody>
+</table>

@@ -1,0 +1,26 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using TowerProcessSheet.Models
+@{
+    ViewData["Title"] = "Send to Programs & Operation";
+    var batch = ViewBag.Batch as Batch;
+    var programsUsers = ViewBag.ProgramsUsers as List<SelectListItem> ?? new();
+}
+<div class="page-head no-print">
+    <h1>Send to Programs &amp; Operation — @batch?.Name</h1>
+    <a class="btn" asp-action="Details" asp-route-id="@batch?.Id">Cancel</a>
+</div>
+
+<div class="flash flash-ok">Every sheet here has been reviewed and stamped by Quality. Send the whole batch on to Programs &amp; Operation to finish it.</div>
+
+<form class="card" asp-action="SendToProgramsOps" asp-route-batchId="@batch?.Id" method="post">
+    @Html.AntiForgeryToken()
+    <div class="field">
+        <label>Send to</label>
+        <select class="input" name="programsUserId">
+            @foreach (var p in programsUsers) { <option value="@p.Value">@p.Text</option> }
+        </select>
+    </div>
+    <div class="step-actions" style="margin-top:16px">
+        <button class="btn btn-primary btn-lg" type="submit">Send</button>
+    </div>
+</form>

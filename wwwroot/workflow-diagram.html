@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>خريطة سير العمل — Process Sheet System</title>
+<style>
+  :root{
+    --navy:#12224a; --navy2:#1c3168; --blue:#2f6fed; --blue-d:#1d4fd0;
+    --amber:#f5a623; --red:#e11111; --green:#15924f; --ink:#14203c; --ink2:#57647f;
+    --line:#d6dce8; --bg:#f4f6fb; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  .wrap{max-width:1400px;margin:0 auto;padding:40px 28px 80px}
+  header{text-align:center;margin-bottom:44px}
+  header h1{font-size:32px;margin:0 0 8px;color:var(--navy)}
+  header p{color:var(--ink2);font-size:15px;margin:0}
+  .flow{display:flex;flex-direction:column;gap:0;position:relative}
+  .stage{display:flex;gap:26px;align-items:stretch;position:relative;padding-bottom:56px}
+  .stage:last-child{padding-bottom:0}
+  .stage::before{
+    content:'';position:absolute;top:64px;bottom:0;right:31px;width:4px;
+    background:linear-gradient(var(--blue),var(--blue) 60%,transparent);
+    z-index:0;
+  }
+  .stage:last-child::before{display:none}
+  .num{
+    flex:none;width:64px;height:64px;border-radius:50%;
+    background:linear-gradient(150deg,var(--blue),var(--blue-d));
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:26px;font-weight:800;box-shadow:0 6px 18px rgba(47,111,237,.35);
+    position:relative;z-index:1;
+  }
+  .card{
+    flex:1;background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:22px 26px;box-shadow:0 4px 16px rgba(20,32,60,.06);
+  }
+  .card h2{margin:0 0 4px;font-size:19px;color:var(--navy)}
+  .card .who{
+    display:inline-flex;align-items:center;gap:8px;background:#eef4ff;color:var(--blue-d);
+    font-weight:800;font-size:12.5px;padding:4px 12px;border-radius:999px;margin-bottom:12px;
+  }
+  .card .who.research{background:#fff2e0;color:#b3650a}
+  .card .who.workshop{background:#eefaf1;color:var(--green)}
+  .card .who.quality{background:#fdeceb;color:var(--red)}
+  .card .who.planning{background:#eef4ff;color:var(--blue-d)}
+  .card .who.admin{background:#f1eefb;color:#5b34c9}
+  .steps{margin:0;padding-inline-start:22px}
+  .steps li{margin-bottom:8px;font-size:14.5px}
+  .steps li b{color:var(--navy)}
+  .steps li code{background:#f1f3f9;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:13px;color:var(--blue-d)}
+  .note{
+    margin-top:12px;background:#fbfcff;border:1px dashed var(--line);border-radius:10px;
+    padding:10px 14px;font-size:13px;color:var(--ink2)
+  }
+  .note.warn{background:#fff8ec;border-color:#f0d9a8;color:#8a5a00}
+  .branches{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap}
+  .branch{
+    flex:1;min-width:230px;background:#fbfcff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+  }
+  .branch h3{margin:0 0 8px;font-size:14.5px;display:flex;align-items:center;gap:6px}
+  .branch.angle h3{color:#b3650a}
+  .branch.plate h3{color:var(--blue-d)}
+  .branch ul{margin:0;padding-inline-start:18px;font-size:13.5px}
+  .branch ul li{margin-bottom:5px}
+  .stamp-mini{
+    display:inline-block;border:2px solid var(--red);border-radius:6px;padding:6px 10px;margin-top:8px;
+    font-size:11.5px;text-align:center;background:#fff
+  }
+  .stamp-mini b{display:block;color:var(--red);font-size:12px}
+  .stamp-mini .code{color:#17109ee0;color:#1746c7;font-weight:800;font-size:14px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin:36px 0 8px}
+  .legend span{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink2)}
+  .legend i{width:14px;height:14px;border-radius:4px;display:inline-block}
+  .final{
+    margin-top:10px;text-align:center;background:linear-gradient(150deg,var(--navy),var(--navy2));
+    color:#fff;border-radius:16px;padding:26px;
+  }
+  .final h2{margin:0 0 6px;font-size:20px}
+  .final p{margin:0;color:#c4d0ee;font-size:13.5px}
+  @media(max-width:760px){
+    .stage{flex-direction:column}
+    .stage::before{display:none}
+    .num{width:48px;height:48px;font-size:18px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>خريطة سير العمل الكاملة — Process Sheet System</h1>
+    <p>مين بيبدأ، بيدوس على ايه، بيرفع ايه، بيعمل ايه، وبيبعت لمين — خطوة بخطوة</p>
+  </header>
+
+  <div class="flow">
+
+    <div class="stage">
+      <div class="num">1</div>
+      <div class="card">
+        <span class="who research">قطاع البحوث — research</span>
+        <h2>البداية: رفع وتقسيم الرسومات</h2>
+        <ol class="steps">
+          <li>يسجل دخول بحساب <code>research</code></li>
+          <li>يدوس على <b>"Split &amp; send drawings"</b> من القائمة الجانبية</li>
+          <li>يكتب اسم اختياري للدفعة (زي اسم المشروع)</li>
+          <li>يرفع الرسومات: إما <b>ملف PDF واحد</b> فيه كل الصفحات، أو <b>ملفات منفصلة</b></li>
+          <li>يدوس <b>"Upload &amp; split"</b></li>
+        </ol>
+        <div class="note">
+          أول مرة بس: هيطلب منه يحدد مكانين على أول رسمة — <b>Part No</b> و<b>Section</b> — عشان النظام يتعلم شكل الرسمة. بعد المرة دي، الخطوة دي مش هتظهر تاني أبدًا.
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">2</div>
+      <div class="card">
+        <span class="who research">قطاع البحوث</span>
+        <h2>التقسيم التلقائي: Angle أم Plate؟</h2>
+        <p style="margin:0 0 4px">النظام بيقرأ حقل <b>Section</b> في كل رسمة، ويقسمها تلقائيًا:</p>
+        <div class="branches">
+          <div class="branch angle">
+            <h3>📐 لو Section بيبدأ بحرف L</h3>
+            <ul><li>مثال: <code>L60*5</code></li><li>تتصنف كـ <b>Angle</b></li></ul>
+          </div>
+          <div class="branch plate">
+            <h3>▬ لو Section بيبدأ بحرف P</h3>
+            <ul><li>مثال: <code>P150*10</code></li><li>تتصنف كـ <b>Plate</b></li></ul>
+          </div>
+        </div>
+        <div class="note">أي حاجة مش واضحة تروح لمجموعة <b>Other</b> — دي بس اللي بتحتاج اختيار المستلم يدويًا.</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">3</div>
+      <div class="card">
+        <span class="who research">قطاع البحوث</span>
+        <h2>وضع الختم — مرة واحدة تطبق على الكل</h2>
+        <ol class="steps">
+          <li>هتظهر شاشة <b>"Place your stamp"</b> فيها رسمة حقيقية من اللي رفعها</li>
+          <li>يسحب الختم لمكانه، ويسحب الزاوية عشان يظبط <b>العرض والارتفاع</b> بشكل مستقل</li>
+          <li>يقدر يظبط <b>حجم الخط</b> كمان من الشرائح تحت</li>
+        </ol>
+        <div class="stamp-mini">
+          <b>Document Control</b>
+          R &amp; D Sector<br/>
+          Date: تلقائي &nbsp; Issue: 1<br/>
+          Copy No.: <span class="code">يتحدد تلقائيًا حسب المستلم</span>
+        </div>
+        <div class="note warn">مكان وحجم الختم ده هيتطبق بالظبط على <b>كل رسمة</b> هتتبعت — من غير ما يحدده لكل واحدة لوحده.</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">4</div>
+      <div class="card">
+        <span class="who research">قطاع البحوث</span>
+        <h2>التأكيد والإرسال — التوزيع تلقائي بالكامل</h2>
+        <p style="margin:0 0 10px">يدوس <b>"Continue"</b> ثم <b>"Send"</b>. كل رسمة بتتبعت تلقائيًا لثلاث جهات حسب نوعها:</p>
+        <div class="branches">
+          <div class="branch angle">
+            <h3>📐 كل رسومات Angle تروح لـ:</h3>
+            <ul>
+              <li>ورشة الاجزاء — <b>Copy No. 14AA</b></li>
+              <li>الجودة — <b>Copy No. 5</b></li>
+              <li>م/ ايمان محمود (تخطيط) — <b>Copy No. 4</b></li>
+            </ul>
+          </div>
+          <div class="branch plate">
+            <h3>▬ كل رسومات Plate تروح لـ:</h3>
+            <ul>
+              <li>ورشة الأبراج — <b>Copy No. 107</b></li>
+              <li>الجودة — <b>Copy No. 5</b></li>
+              <li>م/ ايمان محمود (تخطيط) — <b>Copy No. 4</b></li>
+            </ul>
+          </div>
+        </div>
+        <div class="note">كود الـ Copy No. جوه الختم بيتغير تلقائيًا حسب كل جهة — الجودة تشوف "5"، الورشة تشوف كودها هي، من غير ما حد يحدده يدويًا.</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">5</div>
+      <div class="card">
+        <span class="who research">قطاع البحوث</span>
+        <h2>المراجعة النهائية والتصحيح</h2>
+        <ol class="steps">
+          <li>صفحة <b>"Sent"</b> بتوريله كل رسمة اتبعتت، لمين، وكام رسمة لكل جهة</li>
+          <li>لو رسمة واحدة الختم فيها جه غلط، يدوس <b>"Fix stamp"</b> بتاعها بس</li>
+          <li>تصحيح رسمة واحدة مش بيأثر على أي رسمة تانية اتبعتت</li>
+          <li>يقدر يرجع لأي وقت من <b>"Send history"</b> في القائمة الجانبية</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">6</div>
+      <div class="card">
+        <span class="who workshop">ورشة 14AA / ورشة 107</span>
+        <h2>الورشة — استلام وتنفيذ</h2>
+        <ol class="steps">
+          <li>يسجل دخول بحساب الورشة (<code>workshop.14aa</code> أو <code>workshop.107</code>)</li>
+          <li>يفتح <b>"الوارد"</b> — هيلاقي الدفعة اللي وصلته من البحوث</li>
+          <li>يفتح الدفعة، ويقدر يدوس <b>"⤢ Drawing"</b> على أي رسمة عشان يشوفها كاملة ومختومة</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">7</div>
+      <div class="card">
+        <span class="who quality">الجودة — quality</span>
+        <h2>الجودة — نفس الرسومات، ختمها الخاص</h2>
+        <ol class="steps">
+          <li>يسجل دخول بحساب <code>quality</code></li>
+          <li>يستلم نفس الرسومات (Angle وPlate) لكن الختم بتاعه فيه <b>Copy No. 5</b></li>
+          <li>يقدر يراجعها منفصل عن الورشة تمامًا</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">8</div>
+      <div class="card">
+        <span class="who planning">م/ ايمان محمود — eman.mahmoud</span>
+        <h2>تخطيط الإنتاج — التوزيع الداخلي</h2>
+        <ol class="steps">
+          <li>يسجل دخول بحساب <code>eman.mahmoud</code></li>
+          <li>يستلم كل الرسومات في <b>"Batches I created"</b> (مش "Waiting for you")</li>
+          <li>يقدر يوزعها على فريقها بنفسها بطريقتين:</li>
+        </ol>
+        <div class="branches">
+          <div class="branch angle">
+            <h3>توزيع بالعدد</h3>
+            <ul><li><b>"Distribute drawings"</b> — ترفع كل الملفات وتحدد كام رسمة لكل مهندس</li></ul>
+          </div>
+          <div class="branch plate">
+            <h3>نقل مباشر</h3>
+            <ul><li><b>"Assign to"</b> — تحول الدفعة كلها لحساب مهندس تاني بضغطة واحدة</li></ul>
+          </div>
+        </div>
+        <div class="note">من هنا الدفعة بقت شغل تخطيط عادي — عمليات، تكلفة، توقيعات — زي أي باتش تاني في السيستم.</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">9</div>
+      <div class="card">
+        <span class="who admin">مدير القطاع — manager</span>
+        <h2>المتابعة (اختياري، في أي وقت)</h2>
+        <ol class="steps">
+          <li>يسجل دخول بحساب <code>manager</code></li>
+          <li>يفتح <b>"Team Workload"</b> — يشوف كل مخطط عنده كام رسمة، خلص كام، لسه هيبدأ كام، بعت للجودة كام</li>
+          <li>وتحتها كارت لكل حساب جودة: استلم كام، راجع كام، وافق على كام، ومن عند مين</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="final">
+    <h2>خلاصة الرحلة</h2>
+    <p>البحوث ترفع وتقسم وتختم وتبعت تلقائيًا ← الورشة والجودة يستلموا نسخهم المختومة ← التخطيط يستلم ويوزع داخليًا على فريقه ← مدير القطاع يتابع الكل من مكان واحد</p>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:#fff2e0"></i> البحوث</span>
+    <span><i style="background:#eefaf1"></i> الورشة</span>
+    <span><i style="background:#fdeceb"></i> الجودة</span>
+    <span><i style="background:#eef4ff"></i> التخطيط</span>
+    <span><i style="background:#f1eefb"></i> الإدارة</span>
+  </div>
+</div>
+</body>
+</html>

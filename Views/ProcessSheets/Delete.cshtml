@@ -1,0 +1,27 @@
+@model ProcessSheet
+@{
+    ViewData["Title"] = "Delete Sheet";
+    string cancelHref = Model.BatchId.HasValue
+        ? Url.Action("Details", "Batches", new { id = Model.BatchId.Value })!
+        : Url.Action("Index", "ProcessSheets")!;
+}
+
+<div class="page-head"><h1>Delete Sheet</h1></div>
+
+<div class="card">
+    <p>Are you sure you want to delete this sheet?</p>
+    <table class="list-table">
+        <tr><th>Drawing No.</th><td>@Model.DrawingNo</td></tr>
+        <tr><th>Project</th><td>@Model.ProjectName</td></tr>
+        <tr><th>Section</th><td>@Model.Section</td></tr>
+        <tr><th>Qty</th><td>@Model.Qty</td></tr>
+        <tr><th>Operations</th><td>@Model.Operations.Count</td></tr>
+    </table>
+
+    <form asp-action="Delete" method="post" class="form-actions">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+        <button type="submit" class="btn btn-danger">Yes, delete</button>
+        <a class="btn" href="@cancelHref">Cancel</a>
+    </form>
+</div>

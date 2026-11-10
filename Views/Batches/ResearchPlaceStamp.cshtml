@@ -1,0 +1,163 @@
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Place your stamp";
+    string drawingSrc = ViewBag.DrawingSrc;
+    string previewSrc = ViewBag.PreviewSrc;
+    string token = ViewBag.Token;
+    int angleCount = ViewBag.AngleCount, plateCount = ViewBag.PlateCount, otherCount = ViewBag.OtherCount, imageCount = ViewBag.ImageCount ?? 0;
+    double normX = ViewBag.NormX, normY = ViewBag.NormY, widthPct = ViewBag.WidthPct, fontScale = ViewBag.FontScale;
+    bool anchorRight = ViewBag.AnchorRight, anchorBottom = ViewBag.AnchorBottom;
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("ps_title")</h1>
+    <a class="btn" asp-action="ResearchSplit">@T("cancel")</a>
+</div>
+
+<div class="flash flash-ok">
+    @T("ps_drag_hint")
+</div>
+
+<div class="card" style="margin-bottom:16px">
+    <b>@T("ps_classified")</b>
+    <div class="workload-grid" style="margin-top:10px">
+        <div class="workload-card"><div class="workload-name">📐 @T("ps_total_pre") Angles</div><div class="workload-row"><span>@T("ps_drawings_label")</span><b>@angleCount</b></div></div>
+        <div class="workload-card"><div class="workload-name">▬ @T("ps_total_pre") Plates</div><div class="workload-row"><span>@T("ps_drawings_label")</span><b>@plateCount</b></div></div>
+        @if (otherCount > 0)
+        {
+            <div class="workload-card" style="border-color:#f0d060;background:#fffbea">
+                <div class="workload-name">@T("ps_other_label2")</div>
+                <div class="workload-row"><span>@T("ps_drawings_label")</span><b>@otherCount</b></div>
+            </div>
+        }
+        @if (imageCount > 0)
+        {
+            <div class="workload-card" style="border-color:#c9a0e0;background:#f8f0fb">
+                <div class="workload-name">@T("ps_images_label2")</div>
+                <div class="workload-row"><span>@T("ps_drawings_label")</span><b>@imageCount</b></div>
+            </div>
+        }
+    </div>
+    @if (imageCount > 0)
+    {
+        <p class="muted no-print" style="margin-top:12px;font-size:12.5px">
+            <b>@imageCount</b> @(imageCount == 1 ? T("cal_drawing") : T("cal_drawings")) @T("ps_no_text_p1")
+        </p>
+    }
+    @if (otherCount > 0)
+    {
+        int totalCount = angleCount + plateCount + otherCount;
+        bool isLargeChunk = totalCount > 0 && otherCount * 3 >= totalCount;   // Other is a third or more of everything
+        <div class="flash @(isLargeChunk ? "flash-err" : "flash-ok") no-print" style="margin-top:12px">
+            <b>@otherCount @(otherCount == 1 ? T("cal_drawing") : T("cal_drawings"))</b> @T("ps_could_not_read_out_of") @totalCount @T("ps_could_not_read_post")@(isLargeChunk ? T("ps_large_chunk") : T("ps_small_chunk"))
+            <a class="btn btn-sm btn-primary" style="margin-inline-start:10px" asp-action="ResearchReassignOthers" asp-route-token="@token">
+                @T("ps_reassign_btn") (@otherCount)
+            </a>
+            <span class="muted" style="display:block;margin-top:6px;font-size:12px">@T("ps_keep_reassigning")</span>
+        </div>
+    }
+</div>
+
+<div class="card" style="margin-bottom:16px">
+    <b>@T("ps_defaults_hint")</b>
+    <div class="workload-grid" style="margin-top:10px">
+        <div class="workload-card"><div class="workload-name">@T("ps_angle_default")</div><div class="workload-row"><span>ورشة الأبراج</span><b>107</b></div><div class="workload-row"><span>Quality</span><b>5</b></div><div class="workload-row"><span>التخطيط</span><b>4</b></div></div>
+        <div class="workload-card"><div class="workload-name">@T("ps_plate_default")</div><div class="workload-row"><span>ورشة الاجزاء</span><b>14AA</b></div><div class="workload-row"><span>Quality</span><b>5</b></div><div class="workload-row"><span>التخطيط</span><b>4</b></div></div>
+    </div>
+</div>
+
+<form asp-action="ResearchConfirm" method="get" id="posForm">
+    <input type="hidden" name="token" value="@token" />
+    <input type="hidden" name="angleCount" value="@angleCount" />
+    <input type="hidden" name="plateCount" value="@plateCount" />
+    <input type="hidden" name="otherCount" value="@otherCount" />
+    <input type="hidden" name="imageCount" value="@imageCount" />
+    <input type="hidden" name="normX" id="normX" value="@normX" />
+    <input type="hidden" name="normY" id="normY" value="@normY" />
+    <input type="hidden" name="anchorRight" id="anchorRight" value="@anchorRight.ToString().ToLower()" />
+    <input type="hidden" name="anchorBottom" id="anchorBottom" value="@anchorBottom.ToString().ToLower()" />
+    <input type="hidden" name="widthPct" id="widthPct" value="@widthPct" />
+    <input type="hidden" name="fontScale" id="fontScale" value="@fontScale" />
+
+    <div class="place-toolbar no-print" style="margin-bottom:14px">
+        <label>@T("ps_width") <input type="range" id="widthRange" min="5" max="60" step="0.5" value="@widthPct" /></label>
+        <label>@T("ps_textsize") <input type="range" id="fontRange" min="0.4" max="2.5" step="0.05" value="@fontScale" /></label>
+        <button type="button" id="refreshBtn" class="btn btn-sm">@T("ps_update_preview")</button>
+        <button type="submit" class="btn btn-primary btn-lg" style="margin-inline-start:auto">@T("ps_continue")</button>
+    </div>
+    <div class="muted no-print" style="margin-top:-8px;margin-bottom:10px">
+        @T("ps_textsize_hint")
+    </div>
+</form>
+
+<div class="annotate-wrap" id="sampleWrap" style="margin-top:16px;position:relative;display:inline-block;max-width:100%">
+    <img src="@drawingSrc" alt="sample drawing" style="display:block;max-width:100%;height:auto;box-shadow:0 8px 24px rgba(0,0,0,.15)" />
+    <div class="place-item place-item-active" id="previewItem"
+         style="width:@(widthPct)%; @(anchorRight ? "right" : "left"):@(normX * 100)%; @(anchorBottom ? "bottom" : "top"):@(normY * 100)%;">
+        <img src="@previewSrc" id="stampImg" alt="stamp preview" style="width:100%;height:auto;display:block" />
+        <span class="resize-handle" title="Drag to resize width"></span>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+          var wrap = document.getElementById('sampleWrap');
+          var el = document.getElementById('previewItem');
+          var stampImg = document.getElementById('stampImg');
+          var normXI = document.getElementById('normX'), normYI = document.getElementById('normY');
+          var anchorRightI = document.getElementById('anchorRight'), anchorBottomI = document.getElementById('anchorBottom');
+          var widthPctI = document.getElementById('widthPct'), fontScaleI = document.getElementById('fontScale');
+          var widthRange = document.getElementById('widthRange'), fontRange = document.getElementById('fontRange');
+          var token = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(token));
+
+          function applyStyle() {
+            var ar = anchorRightI.value === 'true', ab = anchorBottomI.value === 'true';
+            el.style.left = ''; el.style.right = ''; el.style.top = ''; el.style.bottom = '';
+            el.style[ar ? 'right' : 'left'] = (parseFloat(normXI.value) * 100) + '%';
+            el.style[ab ? 'bottom' : 'top'] = (parseFloat(normYI.value) * 100) + '%';
+            el.style.width = widthPctI.value + '%';
+          }
+
+          widthRange.addEventListener('input', function () { widthPctI.value = widthRange.value; applyStyle(); });
+          fontRange.addEventListener('input', function () { fontScaleI.value = fontRange.value; });
+
+          document.getElementById('refreshBtn').addEventListener('click', function () {
+            var url = '@Url.Action("ResearchPreviewStamp")?fontScale=' + encodeURIComponent(fontScaleI.value) + '&_=' + Date.now();
+            stampImg.src = url;
+          });
+
+          var dragging = false;
+          el.addEventListener('pointerdown', function (e) {
+            if (e.target.classList.contains('resize-handle')) return;
+            dragging = true; el.setPointerCapture(e.pointerId); e.preventDefault();
+          });
+          el.addEventListener('pointermove', function (e) {
+            if (!dragging) return;
+            var r = wrap.getBoundingClientRect();
+            var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+            var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+            anchorRightI.value = 'false'; anchorBottomI.value = 'false';
+            normXI.value = x.toFixed(3); normYI.value = y.toFixed(3);
+            applyStyle();
+          });
+          el.addEventListener('pointerup', function () { dragging = false; });
+
+          var handle = el.querySelector('.resize-handle');
+          var resizing = false, startX = 0, startW = 0;
+          handle.addEventListener('pointerdown', function (e) {
+            resizing = true; startX = e.clientX; startW = el.getBoundingClientRect().width;
+            handle.setPointerCapture(e.pointerId); e.stopPropagation(); e.preventDefault();
+          });
+          handle.addEventListener('pointermove', function (e) {
+            if (!resizing) return;
+            var r = wrap.getBoundingClientRect();
+            var newWpx = Math.max(20, startW + (e.clientX - startX));
+            widthPctI.value = Math.min(60, Math.max(5, (newWpx / r.width) * 100)).toFixed(1);
+            widthRange.value = widthPctI.value;
+            applyStyle();
+          });
+          handle.addEventListener('pointerup', function (e) { resizing = false; e.stopPropagation(); });
+        })();
+    </script>
+}

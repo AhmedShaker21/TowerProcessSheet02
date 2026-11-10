@@ -1,0 +1,324 @@
+@using Microsoft.EntityFrameworkCore
+@using TowerProcessSheet.Models
+@inject TowerProcessSheet.Data.AppDbContext Db
+@{
+    var title = ViewData["Title"] as string ?? "Process Sheets";
+    var lang = Tr.Lang(Context);
+    var rtl = Tr.Rtl(Context);
+    string T(string k) => Tr.S(Context, k);
+    var path = Context.Request.Path + Context.Request.QueryString;
+    string other = lang == "en" ? "ar" : "en";
+    bool isDisplay = User.IsInRole("Display");
+    bool authed = User.Identity?.IsAuthenticated == true;
+    string current = Context.Request.Path.Value ?? "";
+    bool IsActive(string action) => current.Contains(action, StringComparison.OrdinalIgnoreCase);
+
+    // New-inbox notification: anything sent to me since I last opened my inbox.
+    int newInboxCount = 0;
+    List<string> newFromNames = new();
+    string? myDepartment = null;
+    bool isQualityInspector = false;
+    int newQualityCount = 0;
+    string? newQualityFromName = null;
+    DateTime? newQualityAt = null;
+    if (authed && !isDisplay)
+    {
+        var me = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == User.GetUserId());
+        if (me != null)
+        {
+            myDepartment = me.Department;
+            isQualityInspector = me.Slot == SignOffSlot.QualityInspector;
+            var since = me.LastSeenInboxAt ?? DateTime.MinValue;
+            var newTransfers = await Db.BatchTransfers.AsNoTracking()
+                .Where(t => t.ToUserId == me.Id && t.At > since)
+                .Include(t => t.FromUser).Include(t => t.Batch)
+                .Where(t => t.Batch != null &&
+                    ((t.Batch.CurrentHolderId == me.Id && t.Batch.Status == BatchStatus.InReview)
+                     || t.Batch.CreatedById == me.Id))
+                .OrderByDescending(t => t.At)
+                .ToListAsync();
+            newInboxCount = newTransfers.Select(t => t.BatchId).Distinct().Count();
+            newFromNames = newTransfers.Select(t => t.FromUser?.FullName ?? "—").Distinct().Take(3).ToList();
+
+            // Sheets never generate a BatchTransfer when sent to Quality (they stay put,
+            // just get marked who they were sent to), so they need their own check here.
+            if (isQualityInspector)
+            {
+                var newQualitySheets = await Db.ProcessSheets.AsNoTracking()
+                    .Where(s => s.SentToQualityUserId == me.Id && s.SentToQualityAt > since)
+                    .Include(s => s.Batch).ThenInclude(b => b!.CreatedBy)
+                    .OrderByDescending(s => s.SentToQualityAt)
+                    .ToListAsync();
+                newQualityCount = newQualitySheets.Count;
+                if (newQualityCount > 0)
+                {
+                    newQualityFromName = newQualitySheets.First().Batch?.CreatedBy?.FullName;
+                    newQualityAt = newQualitySheets.First().SentToQualityAt;
+                }
+            }
+        }
+    }
+}
+<!DOCTYPE html>
+<html lang="@lang" dir="@(rtl ? "rtl" : "ltr")">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@title · @T("sysname")</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="@(rtl ? "rtl" : "ltr") @(authed && !isDisplay ? "has-shell" : "")">
+
+    @if (authed && !isDisplay)
+    {
+        <div class="app-shell">
+            <aside class="sidebar">
+                <div class="sb-brand">
+                    <img src="~/img/logo.png" alt="AOI" />
+                    <div class="sb-brand-text">
+                        <b>@T("sysname")</b>
+                        <small>@T("org")</small>
+                    </div>
+                </div>
+
+                <nav class="sb-nav">
+                    <a class="sb-link @(IsActive("/Batches/Index") || current == "/" ? "active" : "")" asp-controller="Batches" asp-action="Index">
+                        <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" /></svg></span><span>@T("nav_inbox")</span>
+                        @if (newInboxCount > 0)
+                        {
+                            <span class="sb-badge">@newInboxCount</span>
+                        }
+                    </a>
+                    <a class="sb-link @(IsActive("/Batches/Projects") ? "active" : "")" asp-controller="Batches" asp-action="Projects">
+                        <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></svg></span><span>Projects</span>
+                    </a>
+                    @if (isQualityInspector)
+                    {
+                        <a class="sb-link @(IsActive("/Batches/QualityInbox") ? "active" : "")" asp-controller="Batches" asp-action="QualityInbox">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4" /><rect x="3" y="4" width="18" height="16" rx="2" /></svg></span><span>For Review</span>
+                        </a>
+                    }
+                    @if (myDepartment == "Programs & Operation")
+                    {
+                        <a class="sb-link @(IsActive("/Batches/ProgramsInbox") ? "active" : "")" asp-controller="Batches" asp-action="ProgramsInbox">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4" /><rect x="3" y="4" width="18" height="16" rx="2" /></svg></span><span>Finalize</span>
+                        </a>
+                        <a class="sb-link @(IsActive("/Batches/SearchByContractOrWorkOrder") ? "active" : "")" asp-controller="Batches" asp-action="SearchByContractOrWorkOrder">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg></span><span>Search Contract/WO</span>
+                        </a>
+                        <a class="sb-link @(IsActive("/Batches/FinalizeChanges") ? "active" : "")" asp-controller="Batches" asp-action="FinalizeChanges">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4" /></svg></span><span>Changed Batches</span>
+                        </a>
+                    }
+                    @if (User.IsInRole("Planner") || User.IsInRole("Admin"))
+                    {
+                        <a class="sb-link @(IsActive("/Batches/History") ? "active" : "")" asp-controller="Batches" asp-action="History">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg></span><span>@T("nav_history")</span>
+                        </a>
+                        <a class="sb-link @(IsActive("/Batches/Dashboard") ? "active" : "")" asp-controller="Batches" asp-action="Dashboard">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 3 4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><path d="m7 21-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg></span><span>@T("nav_pipeline")</span>
+                        </a>
+                        <a class="sb-link @(IsActive("/ProcessSheets") ? "active" : "")" asp-controller="ProcessSheets" asp-action="Index">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M9 13h6" /><path d="M9 17h6" /></svg></span><span>@T("nav_sheets")</span>
+                        </a>
+                    }
+
+                    @if (User.IsInRole("Planner") || User.IsInRole("Admin") || (User.IsInRole("Coordinator") && myDepartment != "Research"))
+                    {
+                        <div class="sb-sep"></div>
+                        <a class="sb-link sb-accent @(IsActive("/Batches/Create") ? "active" : "")" asp-controller="Batches" asp-action="Create">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" /></svg></span><span>@T("nav_newbatch")</span>
+                        </a>
+                    }
+                    @if ((User.IsInRole("Coordinator") && myDepartment != "Research") || User.IsInRole("Admin"))
+                    {
+                        <a class="sb-link @(IsActive("/Batches/DistributeDrawings") ? "active" : "")" asp-controller="Batches" asp-action="DistributeDrawings">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" /><path d="M12 8v8M8 12h8" /></svg></span><span>Distribute drawings</span>
+                        </a>
+                        <a class="sb-link @(IsActive("/ProcessSheets/SetSignaturePositions") ? "active" : "")" asp-controller="ProcessSheets" asp-action="SetSignaturePositions">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg></span><span>Signature positions</span>
+                        </a>
+                        <a class="sb-link @(IsActive("/ProcessSheets/SignedSheets") ? "active" : "")" asp-controller="ProcessSheets" asp-action="SignedSheets">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg></span><span>Signed sheets</span>
+                        </a>
+                    }
+                    @if ((User.IsInRole("Coordinator") && myDepartment == "Research") || User.IsInRole("Admin"))
+                    {
+                        <a class="sb-link @(IsActive("/Batches/ResearchSplit") ? "active" : "")" asp-controller="Batches" asp-action="ResearchSplit">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4z" /><path d="M14 4h6v6h-6z" /><path d="M4 14h6v6H4z" /><path d="M17 14v6M14 17h6" /></svg></span><span>Split &amp; send drawings</span>
+                        </a>
+                        <a class="sb-link @(IsActive("/Batches/ResearchHistory") ? "active" : "")" asp-controller="Batches" asp-action="ResearchHistory">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg></span><span>Send history</span>
+                        </a>
+                    }
+                    @if (User.IsInRole("SectorManager") || User.IsInRole("Admin") || (User.IsInRole("Coordinator") && myDepartment != "Research"))
+                    {
+                        <a class="sb-link @(IsActive("/Manager") ? "active" : "")" asp-controller="Manager" asp-action="Index">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M18.7 8 12 14.7l-3.5-3.5L2 18.5" /></svg></span><span>Team Workload</span>
+                        </a>
+                    }
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <a class="sb-link @(IsActive("/Admin") ? "active" : "")" asp-controller="Admin" asp-action="Index">
+                            <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg></span><span>@T("nav_admin")</span>
+                        </a>
+                    }
+                    <a class="sb-link" href="/guide.html" target="_blank">
+                        <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></svg></span><span>دليل الاستخدام</span>
+                    </a>
+                </nav>
+
+                <div class="sb-foot">
+                    <a class="sb-user" asp-controller="Account" asp-action="Profile">
+                        <span class="sb-avatar">@(User.Identity!.Name!.Substring(0, 1))</span>
+                        <span class="sb-user-name">@User.Identity!.Name</span>
+                    </a>
+                    <div class="sb-foot-row">
+                        <a class="sb-mini-btn" href="@Url.Action("SetLang", "Account", new { lang = other, returnUrl = path })">@(lang == "en" ? "عربي" : "EN")</a>
+                        <form asp-controller="Account" asp-action="Logout" method="post" class="sb-logout-form" id="logoutForm">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="sb-mini-btn sb-logout">@T("logout")</button>
+                        </form>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="main-area">
+                @if (newInboxCount > 0 || newQualityCount > 0)
+                {
+                    <div class="toast-stack no-print" id="toastStack">
+                        @if (newInboxCount > 0)
+                        {
+                            <a href="@Url.Action("Index", "Batches")" class="new-inbox-toast">
+                                <span class="new-inbox-dot"></span>
+                                <b>New in your inbox</b> — from @string.Join(", ", newFromNames)
+                            </a>
+                        }
+                        @if (newQualityCount > 0)
+                        {
+                            <a href="@Url.Action("QualityInbox", "Batches")" class="new-quality-toast">
+                                <span class="new-quality-dot"></span>
+                                <b>Received @newQualityCount sheet@(newQualityCount == 1 ? "" : "s") for review</b>
+                                — from @(newQualityFromName ?? "—") on @(newQualityAt?.ToString("d MMM, h:mm tt"))
+                            </a>
+                        }
+                    </div>
+                    <script>
+                                    (function () {
+                                        // Each toast disappears on its own 10-second timer rather than the
+                                        // whole stack at once, so a second one that shows up slightly later
+                                        // (in a future request) wouldn't vanish early alongside an older one.
+                                        document.querySelectorAll('#toastStack > a').forEach(function (el) {
+                                            setTimeout(function () {
+                                                el.classList.add('toast-out');
+                                                setTimeout(function () { el.remove(); }, 350);
+                                            }, 10000);
+                                        });
+                                    })();
+                    </script>
+                }
+                <main class="container @(ViewData["FullWidth"] as bool? == true ? "container-wide" : "")">
+                    @if (TempData["Msg"] != null)
+                    {
+                        <div class="flash flash-ok">@TempData["Msg"]</div>
+                    }
+                    @if (TempData["Err"] != null)
+                    {
+                        <div class="flash flash-err">@TempData["Err"]</div>
+                    }
+                    @RenderBody()
+                </main>
+                <footer class="footer no-print">
+                    <b>@T("sysname")</b> · © @T("org") - @T("factory") · @T("rights")
+                </footer>
+            </div>
+        </div>
+    }
+    else
+    {
+        <main class="container container-bare">
+            @if (TempData["Msg"] != null)
+            {
+                <div class="flash flash-ok">@TempData["Msg"]</div>
+            }
+            @if (TempData["Err"] != null)
+            {
+                <div class="flash flash-err">@TempData["Err"]</div>
+            }
+            @RenderBody()
+        </main>
+    }
+
+    @await RenderSectionAsync("Scripts", required: false)
+
+    <div id="loadingOverlay" class="loading-overlay" aria-hidden="true">
+        <div class="loading-card">
+            <div class="loading-char-track">
+                <div class="loading-char" id="loadingChar">📄</div>
+            </div>
+            <div class="loading-bar-track">
+                <div class="loading-bar-fill" id="loadingBarFill"></div>
+            </div>
+            <div class="loading-pct" id="loadingPct">0%</div>
+            <div class="loading-label" id="loadingLabel">Working…</div>
+        </div>
+    </div>
+    <script>
+            (function () {
+                var overlay = document.getElementById('loadingOverlay');
+                var fill = document.getElementById('loadingBarFill');
+                var pctEl = document.getElementById('loadingPct');
+                var charEl = document.getElementById('loadingChar');
+                var labelEl = document.getElementById('loadingLabel');
+                var timer = null;
+                var labels = ['Working…', 'Almost there…', 'Just a bit more…'];
+
+                function show(label) {
+                    labelEl.textContent = label || labels[0];
+                    overlay.classList.add('show');
+                    var pct = 0;
+                    pctEl.textContent = '0%';
+                    fill.style.width = '0%';
+                    charEl.style.left = '0%';
+                    if (timer) clearInterval(timer);
+                    timer = setInterval(function () {
+                        // Fast at first, then slows down — never quite reaches 100% until the page
+                        // actually finishes navigating (there's no real progress to report from a
+                        // single blocking request, so this stays honest by never claiming "done").
+                        var remaining = 92 - pct;
+                        pct += Math.max(0.3, remaining * 0.06);
+                        if (pct > 92) pct = 92;
+                        pctEl.textContent = Math.floor(pct) + '%';
+                        fill.style.width = pct + '%';
+                        charEl.style.left = pct + '%';
+                        if (pct > 40 && labelEl.textContent === labels[0]) labelEl.textContent = labels[1];
+                        if (pct > 75 && labelEl.textContent === labels[1]) labelEl.textContent = labels[2];
+                    }, 120);
+                }
+
+                // Show on any real form submission (skip plain GET search/filter forms, which are
+                // instant anyway, and skip anything explicitly opting out with data-no-loading).
+                document.addEventListener('submit', function (e) {
+                    var form = e.target;
+                    if (!(form instanceof HTMLFormElement)) return;
+                    if (form.hasAttribute('data-no-loading')) return;
+                    var method = (form.getAttribute('method') || 'get').toLowerCase();
+                    if (method !== 'post') return;
+                    if (e.defaultPrevented) return;
+                    var btn = document.activeElement;
+                    var label = (btn && btn.tagName === 'BUTTON' && btn.textContent.trim()) ? 'Sending "' + btn.textContent.trim() + '"…' : null;
+                    show(label);
+                }, true);
+
+                // Also cover plain links styled as action buttons that trigger real work (e.g. a
+                // "Send" link that isn't a form), opted in explicitly so normal navigation links
+                // don't all show a spinner for an instant page load.
+                document.addEventListener('click', function (e) {
+                    var el = e.target.closest('[data-loading-link]');
+                    if (!el) return;
+                    show(el.getAttribute('data-loading-label'));
+                }, true);
+            })();
+    </script>
+</body>
+</html>

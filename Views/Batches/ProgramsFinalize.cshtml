@@ -1,0 +1,51 @@
+@using TowerProcessSheet.Models
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Finalize";
+    var batch = ViewBag.Batch as Batch;
+    string? sampleContractNo = ViewBag.SampleContractNotificationNo;
+    string? sampleWorkOrderNo = ViewBag.SampleWorkOrderNo;
+    string? sampleIssue = ViewBag.SampleIssue;
+    string sampleDate = ViewBag.SampleDate;
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("pf_title_pre") @batch?.Name</h1>
+    <a class="btn" asp-action="Details" asp-route-id="@batch?.Id">@T("cancel")</a>
+</div>
+
+<div class="flash flash-ok">
+    @T("pf_hint")
+</div>
+
+<form class="card" asp-action="ProgramsFinalize" asp-route-batchId="@batch?.Id" method="post">
+    @Html.AntiForgeryToken()
+    <div class="field">
+        <label>@T("pf_contract_label")</label>
+        <input class="input" name="contractNotificationNo" value="@sampleContractNo" placeholder="36/2026" />
+    </div>
+    <div class="field">
+        <label>@T("pf_wo_label")</label>
+        <input class="input" name="workOrderNo" value="@sampleWorkOrderNo" placeholder="431-256-005" />
+    </div>
+    <div class="field">
+        <label>@T("pf_qty_label")</label>
+        <input class="input" type="number" name="qtyMultiplier" min="1" value="@(batch?.QtyMultiplier > 0 ? batch.QtyMultiplier : 1)" />
+    </div>
+
+    <div class="hint" style="margin:16px 0 8px">@T("pf_dc_hint")</div>
+    <div class="grid-2">
+        <div class="field">
+            <label>@T("pf_issue_label")</label>
+            <input class="input" name="programsIssue" value="@sampleIssue" placeholder="1" />
+        </div>
+        <div class="field">
+            <label>@T("pf_date_label")</label>
+            <input class="input" type="date" name="programsDate" value="@sampleDate" />
+        </div>
+    </div>
+
+    <div class="step-actions" style="margin-top:16px">
+        <button class="btn btn-primary btn-lg" type="submit">@T("pf_save_continue")</button>
+    </div>
+</form>

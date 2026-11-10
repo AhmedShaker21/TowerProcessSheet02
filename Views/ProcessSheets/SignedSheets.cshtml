@@ -1,0 +1,46 @@
+@using TowerProcessSheet.Controllers
+@{
+    ViewData["Title"] = "Signed sheets";
+    ViewData["FullWidth"] = true;
+    var sheets = ViewBag.Sheets as List<ProcessSheetsController.SignedSheetRow> ?? new();
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">✒️</div>
+        <div>
+            <h1>Signed sheets</h1>
+            <p>Every sheet that's been converted to a real process sheet, with both Planning signatures placed.</p>
+        </div>
+        <div class="mb-head-actions">
+            <div class="mb-stat-card" style="min-width:80px;padding:8px 16px">
+                <div class="mb-stat-num" style="font-size:20px">@sheets.Count</div>
+                <div class="mb-stat-label">Sheets</div>
+            </div>
+        </div>
+    </div>
+
+    @if (sheets.Count == 0)
+    {
+        <div class="mb-empty">No sheets have been converted and signed yet.</div>
+    }
+    else
+    {
+        <table class="list-table">
+            <thead><tr><th>Drawing</th><th>Part No</th><th>Section</th><th>Batch</th><th>Checked by</th><th>Complied by</th><th class="actions-col"></th></tr></thead>
+            <tbody>
+            @foreach (var s in sheets)
+            {
+                <tr>
+                    <td><strong>@s.DrawingNo</strong></td>
+                    <td>@s.PartNo</td>
+                    <td>@s.Section</td>
+                    <td class="muted">@s.BatchName</td>
+                    <td>@s.CheckedBy</td>
+                    <td>@s.CompiledBy</td>
+                    <td class="actions-col"><a class="btn btn-sm" asp-action="Details" asp-route-id="@s.Id" target="_blank">View</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>

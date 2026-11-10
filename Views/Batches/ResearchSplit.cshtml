@@ -1,0 +1,181 @@
+@using TowerProcessSheet.Models
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Split drawings";
+    var saved = ViewBag.Saved as SavedCalibration;
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("rs_title")</h1>
+    <a class="btn" asp-action="Index">@T("cancel")</a>
+</div>
+
+@if (saved != null)
+{
+    <div class="flash flash-ok">@T("rs_layout_set") @saved.UpdatedAt.ToString("yyyy-MM-dd HH:mm")@T("rs_layout_set2")</div>
+}
+else
+{
+    <div class="flash flash-ok">@Html.Raw(T("rs_first_time"))</div>
+}
+
+<div class="hint">
+    @Html.Raw(T("rs_hint"))
+</div>
+
+<form class="card" asp-action="ResearchSplitUpload" method="post" enctype="multipart/form-data" id="upForm" data-no-loading>
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="mode" id="modeInput" value="separate" />
+
+    <div class="field">
+        <label>@T("rs_delivery_name")</label>
+        <input class="input" name="projectName" placeholder="e.g. S2 220 kv" />
+    </div>
+
+    <div class="type-cards" style="margin:16px 0">
+        <div class="type-card selected" data-mode="separate">
+            <div class="tc-check">✓</div>
+            <div class="tc-title">@T("rs_separate_title")</div>
+            <div class="tc-sub">@T("rs_separate_sub")</div>
+        </div>
+        <div class="type-card" data-mode="onepdf">
+            <div class="tc-check"></div>
+            <div class="tc-title">@T("rs_onepdf_title")</div>
+            <div class="tc-sub">@T("rs_onepdf_sub")</div>
+        </div>
+    </div>
+
+    <div class="field">
+        <label>@T("rs_pdfs_label")</label>
+        <input class="input" type="file" name="pdfs" id="pdfsInput" accept="application/pdf" multiple required />
+    </div>
+
+    @if (saved != null)
+    {
+        <div class="field new-format-check">
+            <label style="font-weight:800;font-size:14px;margin-bottom:8px;display:block">@T("rs_new_format_q")</label>
+            <div class="new-format-options">
+                <label class="new-format-opt">
+                    <input type="radio" name="recalibrate" value="false" checked />
+                    <span>@Html.Raw("<b>" + T("rs_no_recal"))</span>
+                </label>
+                <label class="new-format-opt new-format-opt-new">
+                    <input type="radio" name="recalibrate" value="true" />
+                    <span>@Html.Raw("<b>" + T("rs_yes_recal"))</span>
+                </label>
+            </div>
+        </div>
+    }
+
+    <div class="step-actions">
+        <button class="btn btn-primary btn-lg" type="submit" id="uploadBtn">@Html.Raw(T("rs_upload_btn"))</button>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        (function () {
+          var modeInput = document.getElementById('modeInput');
+          var pdfsInput = document.getElementById('pdfsInput');
+          var L = {
+            uploading: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_uploading"))),
+            splitting: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_splitting"))),
+            yourUpload: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_your_upload"))),
+            classifying: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_classifying"))),
+            keepOpen: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_keep_open"))),
+            uploadFailed: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_upload_failed"))),
+            tryAgain: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_try_again"))),
+            checkConn: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_check_conn"))),
+            files: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rs_files")))
+          };
+          document.querySelectorAll('.type-card').forEach(function (c) {
+            c.addEventListener('click', function () {
+              document.querySelectorAll('.type-card').forEach(function (x) { x.classList.remove('selected'); x.querySelector('.tc-check').textContent = ''; });
+              c.classList.add('selected'); c.querySelector('.tc-check').textContent = '✓';
+              modeInput.value = c.dataset.mode;
+              if (c.dataset.mode === 'onepdf') pdfsInput.removeAttribute('multiple'); else pdfsInput.setAttribute('multiple', 'multiple');
+            });
+          });
+
+          // This upload has two genuinely different phases — actually sending the file(s)
+          // over the network, then the server splitting/classifying every page — so one fake
+          // progress bar for the whole thing would be misleading either way. Phase 1 shows
+          // REAL upload progress (native XHR upload events report actual bytes sent); phase 2
+          // switches to an estimate once the browser is done sending and the server takes over.
+          document.getElementById('upForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            var form = e.target;
+            var fileCount = pdfsInput.files.length;
+            var totalBytes = 0;
+            for (var i = 0; i < pdfsInput.files.length; i++) totalBytes += pdfsInput.files[i].size;
+
+            var overlay = document.createElement('div');
+            overlay.id = 'smartLoadingOverlay';
+            overlay.innerHTML =
+              '<div class="sl-box">' +
+                '<div class="sl-spinner"></div>' +
+                '<div class="sl-title" id="slTitle3">' + L.uploading + (fileCount > 1 ? ' ' + fileCount + ' ' + L.files : '') + '…</div>' +
+                '<div class="sl-bar-track"><div class="sl-bar-fill" id="slBarFill3"></div></div>' +
+                '<div class="sl-count" id="slCount3">0%</div>' +
+                '<div class="sl-note">' + L.keepOpen + '</div>' +
+              '</div>';
+            document.body.appendChild(overlay);
+            document.getElementById('uploadBtn').disabled = true;
+
+            var titleEl = document.getElementById('slTitle3');
+            var fill = document.getElementById('slBarFill3');
+            var countEl = document.getElementById('slCount3');
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', form.getAttribute('action') || window.location.pathname, true);
+
+            // Phase 1: real progress, straight from the browser's actual upload progress.
+            xhr.upload.addEventListener('progress', function (ev) {
+              if (!ev.lengthComputable) return;
+              var pct = (ev.loaded / ev.total) * 100;
+              fill.style.width = pct.toFixed(1) + '%';
+              var mbLoaded = (ev.loaded / (1024 * 1024)).toFixed(1);
+              var mbTotal = (ev.total / (1024 * 1024)).toFixed(1);
+              countEl.textContent = pct.toFixed(0) + '% (' + mbLoaded + ' / ' + mbTotal + ' MB)';
+            });
+
+            // Phase 2: the browser has finished sending — now the server is splitting and
+            // classifying every page, which has no real progress to report back mid-request,
+            // so this switches to the same kind of paced estimate used elsewhere in the app.
+            xhr.upload.addEventListener('load', function () {
+              titleEl.textContent = L.splitting + (fileCount > 1 ? ' ' + fileCount + ' ' + L.files : ' ' + L.yourUpload) + '…';
+              var msPerFile = 200;
+              var estimatedMs = Math.max(2000, fileCount * msPerFile);
+              var startedAt = Date.now();
+              (function tick() {
+                var elapsed = Date.now() - startedAt;
+                var pct = Math.min(95, (elapsed / estimatedMs) * 100);
+                fill.style.width = pct.toFixed(1) + '%';
+                countEl.textContent = L.classifying;
+                if (document.body.contains(overlay) && xhr.readyState !== 4) requestAnimationFrame(tick);
+              })();
+            });
+
+            xhr.onload = function () {
+              if (xhr.status >= 200 && xhr.status < 400) {
+                // MVC's redirect response comes back with its final URL on responseURL —
+                // navigating there lands on the next step exactly like a normal form
+                // submission would, just with real progress shown along the way.
+                window.location = xhr.responseURL || window.location.href;
+              } else {
+                overlay.remove();
+                document.getElementById('uploadBtn').disabled = false;
+                alert(L.uploadFailed + ' (' + xhr.status + ')' + L.tryAgain);
+              }
+            };
+            xhr.onerror = function () {
+              overlay.remove();
+              document.getElementById('uploadBtn').disabled = false;
+              alert(L.checkConn);
+            };
+
+            xhr.send(new FormData(form));
+          });
+        })();
+    </script>
+}

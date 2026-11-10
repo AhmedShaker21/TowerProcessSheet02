@@ -1,0 +1,31 @@
+@model List<TowerProcessSheet.Models.Contract>
+@{ ViewData["Title"] = "Contracts"; }
+<div class="page-head no-print">
+    <h1>Contracts</h1>
+    <div class="head-actions"><a class="btn btn-primary" asp-action="Create">+ New Contract</a></div>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="empty">No contracts yet. <a asp-action="Create">Create one</a>, then attach batches to it.</div>
+}
+else
+{
+    <table class="list-table">
+        <thead><tr><th>Contract No.</th><th>Work Order</th><th>Project</th><th>Qty ×</th><th>Batches</th><th>Created</th><th class="actions-col"></th></tr></thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            <tr>
+                <td><strong>@c.ContractNo</strong></td>
+                <td>@c.WorkOrderNo</td>
+                <td>@c.ProjectName</td>
+                <td><span class="mono">@c.QtyMultiplier</span></td>
+                <td><span class="badge-count">@c.Batches.Count</span></td>
+                <td class="muted">@c.CreatedAt.ToString("yyyy-MM-dd")</td>
+                <td class="actions-col"><a class="btn btn-sm" asp-action="Edit" asp-route-id="@c.Id">Open</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

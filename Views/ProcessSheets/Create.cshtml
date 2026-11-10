@@ -1,0 +1,52 @@
+@model ProcessSheet
+@{
+    ViewData["Title"] = "New Sheet";
+    ViewData["FullWidth"] = true;
+    var batch = ViewBag.Batch as TowerProcessSheet.Models.Batch;
+}
+
+<div class="page-head">
+    <h1>New Process Sheet</h1>
+    @if (batch != null)
+    {
+        <a class="btn" asp-controller="Batches" asp-action="Details" asp-route-id="@batch.Id">Back to batch</a>
+    }
+    else
+    {
+        <a class="btn" asp-action="Index">Cancel</a>
+    }
+</div>
+
+@if (batch != null)
+{
+    <div class="flash flash-ok">
+        Adding sheets to batch <strong>@batch.Name</strong>@(string.IsNullOrWhiteSpace(batch.ProjectName) ? "" : $" — {batch.ProjectName}").
+        Use <strong>Save &amp; add another</strong> to keep going, or <strong>Save &amp; finish</strong> when done.
+    </div>
+}
+
+<form asp-action="Create" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    @if (batch != null)
+    {
+        <input type="hidden" name="batchId" value="@batch.Id" />
+    }
+    <partial name="_SheetForm" model="Model" />
+    <div class="form-actions">
+        @if (batch != null)
+        {
+            <button type="submit" name="andAdd" value="1" class="btn btn-primary btn-lg">Save &amp; add another</button>
+            <button type="submit" class="btn">Save &amp; finish</button>
+            <a class="btn" asp-controller="Batches" asp-action="Details" asp-route-id="@batch.Id">Back to batch</a>
+        }
+        else
+        {
+            <button type="submit" class="btn btn-primary">Save Sheet</button>
+            <a class="btn" asp-action="Index">Cancel</a>
+        }
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/js/operations-editor.js" asp-append-version="true"></script>
+}

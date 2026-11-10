@@ -1,0 +1,79 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using TowerProcessSheet.Models
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Send completed to Quality";
+    var batch = ViewBag.Batch as Batch;
+    int completed = ViewBag.Completed;
+    int total = ViewBag.Total;
+    var qualityUsers = ViewBag.QualityUsers as List<SelectListItem> ?? new();
+    var partList = ViewBag.PartList as ProjectPartList;
+    var partCheck = ViewBag.PartListCheck as TowerProcessSheet.Controllers.BatchesController.PartListCheck;
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("sq_title") — @batch?.Name</h1>
+    <a class="btn" asp-action="Details" asp-route-id="@batch?.Id">@T("cancel")</a>
+</div>
+
+<div class="flash flash-ok">
+    @Html.Raw(string.Format(T("sq_info"), completed, total))
+</div>
+
+@if (partCheck != null && partCheck.Rows.Count > 0)
+{
+    int pcTotal = partCheck.Rows.Count;
+    int pcDone = partCheck.Rows.Count(r => r.Marked);
+    int pcDrawing = partCheck.Rows.Count(r => !r.Marked && r.State == 1);
+    int pcMissing = partCheck.Rows.Count(r => !r.Marked && r.State == 0);
+    <div class="flash @(pcDone == pcTotal ? "flash-ok" : "flash-err")" style="display:flex;align-items:center;gap:10px">
+        <span>@Html.Raw(string.Format(T("plc_send_summary"), pcDone, pcTotal, pcDrawing, pcMissing))</span>
+        <a class="btn btn-sm" style="margin-inline-start:auto" asp-action="PartListStatus" asp-route-projectId="@partCheck.ProjectId" target="_blank">@T("plc_send_open")</a>
+    </div>
+}
+
+@if (completed == 0)
+{
+    <div class="empty">@T("sq_nothing")</div>
+}
+else
+{
+    <form class="card" asp-action="SendCompletedToQuality" asp-route-batchId="@batch?.Id" method="post" enctype="multipart/form-data">
+        @Html.AntiForgeryToken()
+        <div class="field">
+            <label>@T("sq_send_to")</label>
+            <select class="input" name="qualityUserId">
+                @foreach (var q in qualityUsers)
+                {
+                    <option value="@q.Value">@q.Text</option>
+                }
+            </select>
+        </div>
+
+        @if (partList != null)
+        {
+            <div class="field">
+                <label class="dest-check" style="display:flex;align-items:center;gap:8px;font-weight:700">
+                    <input type="checkbox" name="sendPartList" value="true" checked />
+                    @T("pl_keep_for_quality")
+                </label>
+                <div class="muted" style="font-size:12.5px;margin-top:4px">
+                    @T("pl_attached") <a asp-action="PartList" asp-route-projectId="@partList.ProjectId" target="_blank">@partList.FileName</a>
+                    @if (!string.IsNullOrEmpty(partList.UploadedByName))
+                    {
+                        <span> — @T("pl_uploaded_by") @partList.UploadedByName, @partList.UploadedAt.ToString("yyyy-MM-dd")</span>
+                    }
+                </div>
+            </div>
+        }
+        <div class="field">
+            <label>@(partList != null ? T("pl_replace") : T("pl_upload_for_quality"))</label>
+            <input class="input" type="file" name="partListFile" accept="application/pdf,.pdf" />
+            <div class="hint" style="margin-top:6px">@T("pl_tpl_hint") <a asp-action="PartListTemplate">@T("pl_tpl_download")</a></div>
+        </div>
+
+        <div class="step-actions" style="margin-top:16px">
+            <button class="btn btn-primary btn-lg" type="submit">@(string.Format(T("sq_send_btn"), completed))</button>
+        </div>
+    </form>
+}

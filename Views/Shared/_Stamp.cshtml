@@ -1,0 +1,12 @@
+@model TowerProcessSheet.Models.SheetReview
+@if (Model != null)
+{
+    if (Model.StampImage != null && Model.StampImage.Length > 0)
+    {
+        <img class="cell-stamp-img" src="data:@(Model.StampMime ?? "image/png");base64,@Convert.ToBase64String(Model.StampImage)" alt="stamp" />
+    }
+    else
+    {
+        <span class="cell-stamp">@(string.IsNullOrWhiteSpace(Model.ReviewerCode) ? Model.ReviewerName : Model.ReviewerCode)</span>
+    }
+}

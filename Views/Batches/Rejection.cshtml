@@ -1,0 +1,27 @@
+@model TowerProcessSheet.Models.ProcessSheet
+@{
+    ViewData["Title"] = $"Rejection {Model.DrawingNo}";
+    var rev = ViewBag.Rejection as TowerProcessSheet.Models.SheetReview;
+}
+<div class="page-head no-print">
+    <h1>Rejected sheet — <span class="mono">@Model.DrawingNo</span></h1>
+    <a class="btn" asp-action="Details" asp-route-id="@Model.BatchId">Back to batch</a>
+</div>
+
+@if (rev != null)
+{
+    <div class="flash flash-err">
+        Rejected by <strong>@rev.ReviewerName</strong> (@rev.Slot) on @rev.ReviewedAt.ToString("yyyy-MM-dd HH:mm)")
+        @(string.IsNullOrWhiteSpace(rev.Comment) ? "" : $" — {rev.Comment}")
+    </div>
+}
+
+<div class="annotate-view">
+    @await Html.PartialAsync("_RouteCard", Model)
+    @if (rev?.AnnotationImage != null && rev.AnnotationImage.Length > 0)
+    {
+        <img class="annotate-overlay"
+             src="data:@(rev.AnnotationMime ?? "image/png");base64,@Convert.ToBase64String(rev.AnnotationImage)"
+             alt="reviewer mark-up" />
+    }
+</div>

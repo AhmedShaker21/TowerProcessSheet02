@@ -1,0 +1,53 @@
+@using TowerProcessSheet.Models
+@{
+    ViewData["Title"] = "Import drawings";
+    int batchId = ViewBag.BatchId;
+    var saved = ViewBag.Saved as SavedCalibration;
+}
+<div class="page-head no-print">
+    <h1>Import drawings</h1>
+    <a class="btn" asp-action="Details" asp-route-id="@batchId">Cancel</a>
+</div>
+
+@if (saved != null)
+{
+    <div class="flash flash-ok">
+        ✓ Using your saved drawing layout (last set @saved.UpdatedAt.ToString("yyyy-MM-dd HH:mm")). Every drawing you
+        upload is read from those same marked spots automatically — no need to mark it again.
+    </div>
+}
+else
+{
+    <div class="hint">
+        Upload all the drawing PDFs for this batch. You'll be shown the <b>first</b> drawing and asked to mark where each
+        piece of data sits — Drawing No, Part No, Section, Qty, Material, Length, Project, and the diagram itself. Every
+        other drawing (now and in future imports) is then read from the <b>same spot</b> automatically.
+    </div>
+}
+
+<form class="card" asp-action="UploadForCalibration" method="post" enctype="multipart/form-data" id="uploadForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="batchId" value="@batchId" />
+    <input type="hidden" name="recalibrate" id="recalibrateInput" value="false" />
+    <div class="field"><label>Drawing PDFs (select all of them)</label>
+        <input class="input" type="file" name="pdfs" accept="application/pdf" multiple required />
+    </div>
+    <div class="step-actions" style="display:flex;gap:10px">
+        <button class="btn btn-primary btn-lg" type="submit">
+            @(saved != null ? "Upload & apply saved layout" : "Upload & mark the first drawing")
+        </button>
+        @if (saved != null)
+        {
+            <button class="btn" type="submit" id="recalibrateBtn">Upload &amp; mark new positions instead</button>
+        }
+    </div>
+</form>
+
+@if (saved != null)
+{
+    <script>
+      document.getElementById('recalibrateBtn').addEventListener('click', function () {
+        document.getElementById('recalibrateInput').value = 'true';
+      });
+    </script>
+}

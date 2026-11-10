@@ -1,0 +1,33 @@
+@model List<TowerProcessSheet.Models.CostCenterEntry>
+@{ ViewData["Title"] = "Cost Centers"; }
+<div class="page-head no-print">
+    <h1>Cost Centers</h1>
+    <a class="btn" asp-action="Index">Admin</a>
+</div>
+<div class="hint">Add every cost-center number with its name. Planners then pick by <b>name</b> when editing a sheet — only the <b>number</b> is ever stored and printed.</div>
+
+<form class="card send-row" asp-action="AddCostCenter" method="post">
+    @Html.AntiForgeryToken()
+    <input class="input" name="number" placeholder="Number (e.g. 4730)" style="max-width:160px" required />
+    <input class="input" name="name" placeholder="Name (e.g. Cutting & Drilling)" required />
+    <button class="btn btn-primary" type="submit">Add</button>
+</form>
+
+<table class="list-table">
+    <thead><tr><th>Number</th><th>Name</th><th class="actions-col"></th></tr></thead>
+    <tbody>
+    @foreach (var c in Model)
+    {
+        <tr>
+            <td class="mono"><strong>@c.Number</strong></td>
+            <td>@c.Name</td>
+            <td class="actions-col">
+                <form asp-action="DeleteCostCenter" asp-route-id="@c.Id" method="post" class="inline-form">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>

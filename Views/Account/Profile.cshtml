@@ -1,0 +1,107 @@
+@model AppUser
+@{
+    ViewData["Title"] = "My profile";
+    bool isResearch = Model.Department == "Research";
+}
+<div class="page-head no-print"><h1>My Profile</h1></div>
+
+<form class="card" asp-action="Profile" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <div class="grid-3">
+        <div class="field"><label>Username</label><input class="input" value="@Model.Username" disabled /></div>
+        <div class="field"><label>Role (stamp slot)</label><input class="input" value="@Model.Slot" disabled /></div>
+        <div class="field"><label>Department</label><input class="input" name="department" value="@Model.Department" /></div>
+    </div>
+    <div class="field"><label>Full name</label><input class="input" name="fullName" value="@Model.FullName" /></div>
+
+    @if (isResearch)
+    {
+        <div class="grid-2">
+            <div class="field"><label>Document Control sector</label><input class="input" name="sector" value="@Model.Sector" placeholder="e.g. R & D Sector" /></div>
+            <div class="field"><label>Issue number</label><input class="input" name="docIssue" value="@Model.DocIssue" placeholder="e.g. 1" /></div>
+        </div>
+        <div class="hint">
+            The workshop number and today's date are added to your stamp automatically for every group you send — you only
+            choose the date at send time. <a asp-action="StampPosition">Set where the stamp goes on the sheet →</a>
+        </div>
+    }
+    else
+    {
+        <div class="field"><label>Stamp code (shown in the red oval, e.g. HAF 59)</label><input class="input" name="stampCode" value="@Model.StampCode" /></div>
+        <div class="grid-2">
+            <div class="field"><label>Document Control sector (Quality role)</label><input class="input" name="sector" value="@Model.Sector" placeholder="e.g. R & D Sector / Production Sector" /></div>
+            <div class="field"><label>Issue number</label><input class="input" name="docIssue" value="@Model.DocIssue" placeholder="e.g. 1" /></div>
+        </div>
+        <div class="field">
+            <label>Document Control stamp color</label>
+            <input type="color" class="input" name="docControlColor" value="@(Model.DocControlColor ?? "#e11111")" style="width:60px;padding:2px" />
+        </div>
+        <div class="grid-2">
+            <div class="field"><label>"Complied by" name (shown on the sheet when you sign as Complied by)</label><input class="input" name="compliedByName" value="@Model.CompliedByName" placeholder="Defaults to your full name" /></div>
+            <div class="field"><label>"Checked" name (shown on the sheet when you sign as Checked)</label><input class="input" name="checkedByName" value="@Model.CheckedByName" placeholder="Defaults to your full name" /></div>
+        </div>
+
+        <div class="grid-2">
+            <div class="field">
+                <label>Stamp image (PNG, ideally transparent)</label>
+                <input class="input file-input" type="file" name="stamp" accept="image/*" />
+            </div>
+            <div class="field">
+                <label>Current stamp</label>
+                @if (Model.HasStamp)
+                {
+                    <img class="stamp-preview" src="@Url.Action("Stamp", new { id = Model.Id })" alt="stamp" />
+                    <div style="margin-top:8px"><a class="btn btn-sm" asp-action="StampFields">Configure Date / Issue / Copy fields</a></div>
+                }
+                else
+                {
+                    <div class="muted">No stamp uploaded yet.</div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="field"><label>New password (leave blank to keep)</label><input class="input" type="password" name="newPassword" /></div>
+    <button class="btn btn-primary" type="submit">Save profile</button>
+</form>
+
+@if (!isResearch)
+{
+    <div class="field">
+        <label>Signatures (توقيعك — separate from the stamp; you can save more than one)</label>
+        <div class="muted">Manage your saved signatures below. When placing a stamp on a batch, you'll be able to pick either one.</div>
+    </div>
+
+    <div class="card">
+        <div class="page-head no-print" style="margin-bottom:12px"><h2 style="margin:0;font-size:18px">My signatures</h2></div>
+
+        @{ var signatures = ViewBag.Signatures as List<UserSignature> ?? new(); }
+        @if (signatures.Count == 0)
+        {
+            <div class="muted" style="margin-bottom:14px">No signatures saved yet.</div>
+        }
+        else
+        {
+            <div class="sig-gallery">
+                @foreach (var s in signatures)
+                {
+                    <div class="sig-card">
+                        <img src="@Url.Action("SignatureImg", new { id = s.Id })" alt="signature" />
+                        <div class="sig-card-label">@(string.IsNullOrWhiteSpace(s.Label) ? $"Signature {s.Id}" : s.Label)</div>
+                        <form asp-action="DeleteSignature" asp-route-id="@s.Id" method="post" class="inline-form">
+                            @Html.AntiForgeryToken()
+                            <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+                        </form>
+                    </div>
+                }
+            </div>
+        }
+
+        <form asp-action="AddSignature" method="post" enctype="multipart/form-data" class="grid-2">
+            @Html.AntiForgeryToken()
+            <div class="field"><label>Add a signature image</label><input class="input file-input" type="file" name="file" accept="image/*" required /></div>
+            <div class="field"><label>Label (optional, e.g. "Official")</label><input class="input" name="label" placeholder="Signature @(signatures.Count + 1)" /></div>
+            <button class="btn btn-primary" type="submit">Add signature</button>
+        </form>
+    </div>
+}

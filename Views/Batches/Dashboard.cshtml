@@ -1,0 +1,54 @@
+@model List<TowerProcessSheet.Models.Batch>
+@{
+    ViewData["Title"] = "Pipeline";
+    ViewData["FullWidth"] = true;
+    var counts = ViewBag.Counts as Dictionary<int, int> ?? new();
+    string StatusChip(TowerProcessSheet.Models.BatchStatus s) => s switch
+    {
+        TowerProcessSheet.Models.BatchStatus.Approved => "chip-galv",
+        TowerProcessSheet.Models.BatchStatus.Rejected => "chip-rej",
+        TowerProcessSheet.Models.BatchStatus.InReview => "chip-angle",
+        _ => "chip-plate",
+    };
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">📊</div>
+        <div>
+            <h1>Batch Pipeline</h1>
+            <p>Where every batch currently sits and who holds it.</p>
+        </div>
+        <div class="mb-head-actions">
+            <div class="mb-stat-card" style="min-width:80px;padding:8px 16px">
+                <div class="mb-stat-num" style="font-size:20px">@Model.Count</div>
+                <div class="mb-stat-label">Batches</div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.Count == 0)
+    {
+        <div class="mb-empty">No batches yet. <a asp-action="Create">Create one</a>.</div>
+    }
+    else
+    {
+        <table class="list-table">
+            <thead><tr><th>Batch</th><th>Project</th><th>Sheets</th><th>Status</th><th>Now with</th><th>Created by</th><th>Created</th><th class="actions-col"></th></tr></thead>
+            <tbody>
+            @foreach (var b in Model)
+            {
+                <tr>
+                    <td><strong>@b.Name</strong></td>
+                    <td>@b.ProjectName</td>
+                    <td><span class="badge-count">@(counts.TryGetValue(b.Id, out var c) ? c : 0)</span></td>
+                    <td><span class="chip @StatusChip(b.Status)">@b.Status</span></td>
+                    <td>@(b.CurrentHolder?.FullName ?? "—")</td>
+                    <td>@b.CreatedBy?.FullName</td>
+                    <td class="muted">@b.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td class="actions-col"><a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">Open</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>

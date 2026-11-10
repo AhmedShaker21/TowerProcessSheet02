@@ -1,0 +1,89 @@
+@model AppUser
+@{
+    ViewData["Title"] = "Stamp position";
+    var sample = ViewBag.Sample as ProcessSheet;
+    string previewSrc = ViewBag.PreviewSrc;
+}
+<div class="page-head no-print">
+    <h1>Where should your stamp go?</h1>
+    <a class="btn" asp-action="Profile">Back to profile</a>
+</div>
+
+<div class="flash flash-ok">Drag the stamp to where it should sit, drag its corner to resize, then Save. Every batch you send uses this exact spot from now on.</div>
+
+<form asp-action="StampPosition" method="post" id="posForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="normX" id="normX" value="@Model.AutoStampNormX" />
+    <input type="hidden" name="normY" id="normY" value="@Model.AutoStampNormY" />
+    <input type="hidden" name="anchorRight" id="anchorRight" value="@Model.AutoStampAnchorRight.ToString().ToLower()" />
+    <input type="hidden" name="anchorBottom" id="anchorBottom" value="@Model.AutoStampAnchorBottom.ToString().ToLower()" />
+    <input type="hidden" name="widthPct" id="widthPct" value="@Model.AutoStampWidthPct" />
+    <button type="submit" class="btn btn-primary btn-lg">Save position</button>
+</form>
+
+<div class="annotate-wrap" id="sampleWrap" style="margin-top:16px">
+    @if (sample != null)
+    {
+        @await Html.PartialAsync("_RouteCard", sample)
+    }
+    else
+    {
+        <div class="empty">No sample sheet exists yet to preview against — the position will still save correctly.</div>
+    }
+    <div class="place-item place-item-active" id="previewItem"
+         style="width:@(Model.AutoStampWidthPct)%; @(Model.AutoStampAnchorRight ? "right" : "left"):@(Model.AutoStampNormX * 100)%; @(Model.AutoStampAnchorBottom ? "bottom" : "top"):@(Model.AutoStampNormY * 100)%;">
+        <img src="@previewSrc" alt="stamp preview" />
+        <span class="resize-handle" title="Drag to resize"></span>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+  var wrap = document.querySelector('#sampleWrap .route-card-wrapper') || document.getElementById('sampleWrap');
+  var el = document.getElementById('previewItem');
+  var normX = document.getElementById('normX'), normY = document.getElementById('normY');
+  var anchorRight = document.getElementById('anchorRight'), anchorBottom = document.getElementById('anchorBottom');
+  var widthPct = document.getElementById('widthPct');
+
+  function applyStyle() {
+    var ar = anchorRight.value === 'true', ab = anchorBottom.value === 'true';
+    el.style.left = ''; el.style.right = ''; el.style.top = ''; el.style.bottom = '';
+    el.style[ar ? 'right' : 'left'] = (parseFloat(normX.value) * 100) + '%';
+    el.style[ab ? 'bottom' : 'top'] = (parseFloat(normY.value) * 100) + '%';
+    el.style.width = widthPct.value + '%';
+  }
+
+  var dragging = false;
+  el.addEventListener('pointerdown', function (e) {
+    if (e.target.classList.contains('resize-handle')) return;
+    dragging = true; el.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  el.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    var r = wrap.getBoundingClientRect();
+    var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+    var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+    anchorRight.value = 'false'; anchorBottom.value = 'false';
+    normX.value = x.toFixed(3); normY.value = y.toFixed(3);
+    applyStyle();
+  });
+  el.addEventListener('pointerup', function () { dragging = false; });
+
+  var handle = el.querySelector('.resize-handle');
+  var resizing = false, startX = 0, startW = 0;
+  handle.addEventListener('pointerdown', function (e) {
+    resizing = true; startX = e.clientX; startW = el.getBoundingClientRect().width;
+    handle.setPointerCapture(e.pointerId); e.stopPropagation(); e.preventDefault();
+  });
+  handle.addEventListener('pointermove', function (e) {
+    if (!resizing) return;
+    var r = wrap.getBoundingClientRect();
+    var newWpx = Math.max(30, startW + (e.clientX - startX));
+    widthPct.value = Math.min(60, Math.max(5, (newWpx / r.width) * 100)).toFixed(1);
+    applyStyle();
+  });
+  handle.addEventListener('pointerup', function (e) { resizing = false; e.stopPropagation(); });
+})();
+</script>
+}

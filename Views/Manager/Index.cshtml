@@ -1,0 +1,63 @@
+@using TowerProcessSheet.Controllers
+@{
+    ViewData["Title"] = "Team workload";
+    ViewData["FullWidth"] = true;
+    var planners = ViewBag.Planners as List<ManagerController.PlannerRow> ?? new();
+    var quality = ViewBag.Quality as List<ManagerController.QualityRow> ?? new();
+}
+
+<div class="mb-head">
+    <div class="mb-head-icon mb-head-icon-neutral">👥</div>
+    <div>
+        <h1>Team Workload</h1>
+        <p>Who has what right now, across Planning and Quality.</p>
+    </div>
+</div>
+
+<h2 class="section-h">Planning</h2>
+<div class="workload-grid">
+    @foreach (var p in planners)
+    {
+        <div class="workload-card">
+            <div class="workload-name">@p.Name</div>
+            <div class="workload-total">@p.TotalSheets <span>Drawing sheet@(p.TotalSheets == 1 ? "" : "s")</span></div>
+            <div class="workload-rows">
+                <div class="workload-row"><span>Finished</span><b class="@(p.Finished > 0 ? "ok" : "")">@p.Finished</b></div>
+                <div class="workload-row"><span>Not started yet</span><b class="@(p.NotStarted > 0 ? "warn" : "")">@p.NotStarted</b></div>
+                <div class="workload-row"><span>Sent to Quality</span><b>@p.SentToQuality</b></div>
+                @if (p.ReceivedFromResearch > 0)
+                {
+                    <div class="workload-row"><span>Converted to Process</span><b class="@(p.Converted == p.ReceivedFromResearch ? "ok" : "warn")">@p.Converted / @p.ReceivedFromResearch</b></div>
+                }
+            </div>
+        </div>
+    }
+    @if (planners.Count == 0)
+    {
+        <div class="empty">No planners set up yet.</div>
+    }
+</div>
+
+<h2 class="section-h">Quality</h2>
+<div class="workload-grid">
+    @foreach (var q in quality)
+    {
+        <div class="workload-card workload-card-qa">
+            <div class="workload-name">@q.Name</div>
+            <div class="workload-total">@q.Received <span>received</span></div>
+            <div class="workload-rows">
+                <div class="workload-row"><span>Reviewed</span><b>@q.Reviewed</b></div>
+                <div class="workload-row"><span>Approved</span><b class="ok">@q.Approved</b></div>
+                <div class="workload-row"><span>Still pending</span><b class="@(q.Received - q.Reviewed > 0 ? "warn" : "")">@(q.Received - q.Reviewed)</b></div>
+            </div>
+            @if (q.ReceivedFrom.Count > 0)
+            {
+                <div class="workload-from">From: @string.Join(", ", q.ReceivedFrom)</div>
+            }
+        </div>
+    }
+    @if (quality.Count == 0)
+    {
+        <div class="empty">No Quality accounts set up yet.</div>
+    }
+</div>

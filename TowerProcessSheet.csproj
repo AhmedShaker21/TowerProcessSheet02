@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<RootNamespace>TowerProcessSheet</RootNamespace>
+		<AssemblyName>TowerSystem</AssemblyName>
+		<!-- Single-file publish needs native libs (PDFium, SkiaSharp, SQLite) to self-extract. -->
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<!-- Bake wwwroot (css/js) into the assembly so no folder is needed beside the .exe. -->
+		<GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Embed everything under wwwroot instead of copying it as a loose folder. -->
+		<Content Remove="wwwroot\**" />
+		<EmbeddedResource Include="wwwroot\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.10" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.10">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<PackageReference Include="PdfPig" Version="0.1.8" />
+		<PackageReference Include="Docnet.Core" Version="2.6.0" />
+		<PackageReference Include="SkiaSharp" Version="2.88.8" />
+		<PackageReference Include="PdfSharp" Version="6.1.1" />
+		<PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="8.0.10" />
+		<PackageReference Include="ClosedXML" Version="0.102.3" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+		<!-- OCR for drawings whose title-block table is a picture (reads it from the page image). -->
+		<PackageReference Include="Tesseract" Version="5.2.0" />
+	</ItemGroup>
+
+	<!-- Tesseract's own native DLLs (x64\leptonica-*.dll, x64\tesseract50.dll). The package only copies them to the
+       build output, NOT to publish — so they are listed here explicitly and land in publish\x64 next to the exe. -->
+	<ItemGroup Condition="'$(NuGetPackageRoot)' != ''">
+		<Content Include="$(NuGetPackageRoot)tesseract\5.2.0\x64\*.dll" Link="x64\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<!-- These images ship with every build/publish automatically from here on — no more
+       manually copying a file next to the exe after each publish. Program.cs still
+       reads them from AppContext.BaseDirectory at startup (unchanged); this just makes
+       sure they're actually there once published. -->
+	<ItemGroup>
+		<Content Include="builtin-stamps\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+		<Content Include="builtin-signatures\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+		<!-- OCR language data (English) — must sit in a tessdata folder next to the exe. -->
+		<Content Include="tessdata\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+	</ItemGroup>
+
+</Project>

@@ -1,0 +1,33 @@
+@model List<TowerProcessSheet.Models.Department>
+@{
+    ViewData["Title"] = "Departments";
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("adm_departments")</h1>
+    <a class="btn" asp-action="Index">@T("nav_admin")</a>
+</div>
+
+<form class="card send-row" asp-action="AddDepartment" method="post">
+    @Html.AntiForgeryToken()
+    <input class="input" name="name" placeholder="@T("name")" required />
+    <button class="btn btn-primary" type="submit">@T("add")</button>
+</form>
+
+<table class="list-table">
+    <thead><tr><th>@T("name")</th><th class="actions-col"></th></tr></thead>
+    <tbody>
+    @foreach (var d in Model)
+    {
+        <tr>
+            <td><strong>@d.Name</strong></td>
+            <td class="actions-col">
+                <form asp-action="DeleteDepartment" asp-route-id="@d.Id" method="post" class="inline-form">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-danger" type="submit">@T("delete")</button>
+                </form>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>

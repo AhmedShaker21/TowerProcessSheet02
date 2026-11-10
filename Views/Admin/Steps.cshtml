@@ -1,0 +1,46 @@
+@model List<TowerProcessSheet.Models.CustomStep>
+@{
+    ViewData["Title"] = "Process steps";
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("adm_steps")</h1>
+    <a class="btn" asp-action="Index">@T("nav_admin")</a>
+</div>
+
+<div class="hint">Add any process here — e.g. Cutting, Milling, Drilling — with the exact <b>cost center number</b> that must appear on the sheet for that process.</div>
+
+<form class="card" asp-action="AddStep" method="post">
+    @Html.AntiForgeryToken()
+    <div class="grid-3">
+        <div class="field"><label>@T("name")</label><input class="input" name="name" required /></div>
+        <div class="field"><label>@T("costcent") — appears on the sheet</label><input class="input" name="costCenter" placeholder="4730" /></div>
+        <div class="field"><label>@T("setting")</label><input class="input" name="setting" placeholder="5" /></div>
+        <div class="field"><label>@T("timealld")</label><input class="input" name="timeAllowed" placeholder="5" /></div>
+        <div class="field"><label>@T("desc")</label><input class="input" name="description" placeholder="{length} {project} {drawing}" /></div>
+        <div class="field"><label class="chk"><input type="checkbox" name="addInspection" value="true" checked /> @T("addinsp")</label></div>
+    </div>
+    <button class="btn btn-primary" type="submit">@T("add")</button>
+</form>
+
+<table class="list-table">
+    <thead><tr><th>@T("name")</th><th>@T("costcent")</th><th>@T("setting")</th><th>@T("timealld")</th><th>@T("desc")</th><th class="actions-col"></th></tr></thead>
+    <tbody>
+    @foreach (var s in Model)
+    {
+        <tr>
+            <td><strong>@s.Name</strong></td>
+            <td class="mono">@s.CostCenter</td>
+            <td class="mono">@s.Setting</td>
+            <td class="mono">@s.TimeAllowed</td>
+            <td class="muted">@s.Description</td>
+            <td class="actions-col">
+                <form asp-action="DeleteStep" asp-route-id="@s.Id" method="post" class="inline-form">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-sm btn-danger" type="submit">@T("delete")</button>
+                </form>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>

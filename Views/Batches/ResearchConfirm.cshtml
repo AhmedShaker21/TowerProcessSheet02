@@ -1,0 +1,264 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using TowerProcessSheet.Models
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Send to";
+    string token = ViewBag.Token;
+    int angleCount = ViewBag.AngleCount;
+    int plateCount = ViewBag.PlateCount;
+    int otherCount = ViewBag.OtherCount;
+    int imageCount = ViewBag.ImageCount ?? 0;
+    double normX = ViewBag.NormX, normY = ViewBag.NormY, widthPct = ViewBag.WidthPct, fontScale = ViewBag.FontScale;
+    bool anchorRight = ViewBag.AnchorRight, anchorBottom = ViewBag.AnchorBottom;
+    var destinations = ViewBag.Destinations as List<SelectListItem> ?? new();
+    var coreDestinations = ViewBag.CoreDestinations as List<AppUser> ?? new();
+    int? angleWorkshopId = ViewBag.AngleWorkshopId; int? plateWorkshopId = ViewBag.PlateWorkshopId;
+    int? qualityId = ViewBag.QualityId; int? emanMahmoudId = ViewBag.EmanMahmoudId;
+    string T(string k) => Tr.S(Context, k);
+    var existingProjects = ViewBag.ExistingProjects as List<string> ?? new List<string>();
+    string currentProject = ((ViewBag.ProjectName as string) ?? "").Trim();
+    // Sensible starting checkmarks (matching how this used to always work) — fully editable from here.
+    var angleDefaults = new HashSet<int?> { angleWorkshopId, qualityId, emanMahmoudId };
+    var plateDefaults = new HashSet<int?> { plateWorkshopId, qualityId, emanMahmoudId };
+    // Other could be either an Angle- or Plate-type drawing that just failed to
+    // classify, so its default sends to everyone who'd normally see either kind —
+    // both workshops plus Quality and Planning — so nobody misses it.
+    var otherDefaults = new HashSet<int?> { angleWorkshopId, plateWorkshopId, qualityId, emanMahmoudId };
+}
+<div class="page-head no-print">
+    <h1>@T("rc_title")</h1>
+    <a class="btn" asp-action="ResearchSplit">@T("cancel")</a>
+</div>
+
+<div class="hint">
+    @T("rc_hint")
+</div>
+
+<form class="card" asp-action="ResearchSplitSend" method="post" enctype="multipart/form-data" id="sendForm" data-no-loading>
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="token" value="@token" />
+    <input type="hidden" name="normX" value="@normX" />
+    <input type="hidden" name="normY" value="@normY" />
+    <input type="hidden" name="anchorRight" value="@anchorRight.ToString().ToLower()" />
+    <input type="hidden" name="anchorBottom" value="@anchorBottom.ToString().ToLower()" />
+    <input type="hidden" name="widthPct" value="@widthPct" />
+    <input type="hidden" name="fontScale" value="@fontScale" />
+    <div class="field">
+        <label>@T("rc_project_pick")</label>
+        @if (existingProjects.Count > 0)
+        {
+            <select class="input" id="projectSel">
+                <option value="">@T("rc_project_choose")</option>
+                @foreach (var pn in existingProjects)
+                {
+                    <option value="@pn" selected="@(pn == currentProject)">@pn</option>
+                }
+                <option value="__new__" selected="@(currentProject != "" && !existingProjects.Contains(currentProject))">@T("rc_project_new")</option>
+            </select>
+        }
+        <input class="input" id="projectInput" name="projectName" value="@currentProject" maxlength="100" placeholder="@T("rc_project_new_ph")" style="@(existingProjects.Count > 0 ? "margin-top:8px" : "")" required />
+        <div class="hint" style="margin-top:6px">@T("rc_project_hint")</div>
+    </div>
+    <div class="field">
+        <label>@T("rc_batch_label")</label>
+        <input class="input" name="batchName" value="@ViewBag.BatchName" maxlength="100" placeholder="@T("rc_batch_ph")" required />
+    </div>
+    <div class="field">
+        <label>@T("rc_stamp_date")</label>
+        <input class="input" type="date" name="stampDate" value="@DateTime.Now.ToString("yyyy-MM-dd")" />
+    </div>
+    <div class="field">
+        <label>@T("pl_research_label")</label>
+        <input class="input" type="file" name="partListFile" accept="application/pdf,.pdf" />
+        <div class="hint" style="margin-top:6px">@T("pl_tpl_hint") <a asp-action="PartListTemplate">@T("pl_tpl_download")</a></div>
+    </div>
+
+    <div class="workload-grid" style="margin-top:16px">
+        <div class="workload-card">
+            <div class="workload-name">📐 Angle</div>
+            <div class="workload-total">@angleCount <span>@(angleCount == 1 ? T("cal_drawing") : T("cal_drawings"))</span></div>
+            @if (angleCount > 0)
+            {
+                <div class="dest-checklist">
+                    @foreach (var u in coreDestinations)
+                    {
+                        <label class="dest-check">
+                            <input type="checkbox" name="angleToUserIds" value="@u.Id" checked="@angleDefaults.Contains(u.Id)" />
+                            @(u.Id == emanMahmoudId ? "التخطيط" : u.FullName) <span>(@u.StampCode)</span>
+                        </label>
+                    }
+                </div>
+                <a class="btn btn-sm" style="margin-top:10px;width:100%;justify-content:center"
+                   target="_blank"
+                   asp-action="ResearchPreviewGroup" asp-route-token="@token" asp-route-group="angle"
+                   asp-route-normX="@normX" asp-route-normY="@normY" asp-route-anchorRight="@anchorRight" asp-route-anchorBottom="@anchorBottom"
+                   asp-route-widthPct="@widthPct" asp-route-fontScale="@fontScale">@T("rc_preview_all_pre") @angleCount</a>
+            }
+        </div>
+        <div class="workload-card">
+            <div class="workload-name">▬ Plate</div>
+            <div class="workload-total">@plateCount <span>@(plateCount == 1 ? T("cal_drawing") : T("cal_drawings"))</span></div>
+            @if (plateCount > 0)
+            {
+                <div class="dest-checklist">
+                    @foreach (var u in coreDestinations)
+                    {
+                        <label class="dest-check">
+                            <input type="checkbox" name="plateToUserIds" value="@u.Id" checked="@plateDefaults.Contains(u.Id)" />
+                            @(u.Id == emanMahmoudId ? "التخطيط" : u.FullName) <span>(@u.StampCode)</span>
+                        </label>
+                    }
+                </div>
+                <a class="btn btn-sm" style="margin-top:10px;width:100%;justify-content:center"
+                   target="_blank"
+                   asp-action="ResearchPreviewGroup" asp-route-token="@token" asp-route-group="plate"
+                   asp-route-normX="@normX" asp-route-normY="@normY" asp-route-anchorRight="@anchorRight" asp-route-anchorBottom="@anchorBottom"
+                   asp-route-widthPct="@widthPct" asp-route-fontScale="@fontScale">@T("rc_preview_all_pre") @plateCount</a>
+            }
+        </div>
+        @if (otherCount > 0)
+        {
+            <div class="workload-card" style="border-color:#f0d060;background:#fffbea">
+                <div class="workload-name">@T("rc_other_label")</div>
+                <div class="workload-total">@otherCount <span>@(otherCount == 1 ? T("cal_drawing") : T("cal_drawings"))</span></div>
+                <p style="margin:8px 0 6px;font-size:12.5px;color:var(--ink-2)">
+                    @T("rc_other_hint")
+                </p>
+                <div class="dest-checklist">
+                    @foreach (var u in coreDestinations)
+                    {
+                        <label class="dest-check">
+                            <input type="checkbox" name="otherToUserIds" value="@u.Id" checked="@otherDefaults.Contains(u.Id)" />
+                            @(u.Id == emanMahmoudId ? "التخطيط" : u.FullName) <span>(@u.StampCode)</span>
+                        </label>
+                    }
+                </div>
+            </div>
+        }
+        @if (imageCount > 0)
+        {
+            <div class="workload-card" style="border-color:#c9a0e0;background:#f8f0fb">
+                <div class="workload-name">@T("rc_images_label")</div>
+                <div class="workload-total">@imageCount <span>@(imageCount == 1 ? T("cal_drawing") : T("cal_drawings"))</span></div>
+                <p style="margin:8px 0 6px;font-size:12.5px;color:var(--ink-2)">
+                    @T("rc_images_hint")
+                </p>
+                <label style="display:block;font-size:12px;font-weight:700">
+                    @T("rc_send_to_pick")
+                    <select style="display:block;margin-top:4px;width:100%" class="input" name="imageToUserId">
+                        <option value="">@T("rc_dont_send")</option>
+                        @foreach (var d in destinations)
+                        {
+                            <option value="@d.Value">@d.Text</option>
+                        }
+                    </select>
+                </label>
+            </div>
+        }
+    </div>
+
+    <div class="step-actions" style="margin-top:16px">
+        <button class="btn btn-primary btn-lg" type="submit" id="sendBtn">@T("rc_send_btn")</button>
+    </div>
+</form>
+
+<style>
+    .dest-checklist {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .dest-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+        cursor: pointer;
+    }
+
+        .dest-check span {
+            color: var(--ink-2);
+            font-weight: 700;
+        }
+</style>
+
+<script>
+    (function () {
+        var L = {
+            sending: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rc_sending"))),
+            starting: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_starting"))),
+            keepOpen: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rc_keep_open_send"))),
+            of: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_of"))),
+            sent: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rc_sent"))),
+            sendingEllipsis: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("rc_sending_ellipsis")))
+        };
+        // Project picker: choose an existing project, or "new project" to type a fresh name.
+        (function () {
+          var sel = document.getElementById('projectSel'), inp = document.getElementById('projectInput');
+          if (!sel) return;
+          function sync() {
+            var isNew = sel.value === '__new__' || sel.value === '';
+            if (!isNew) inp.value = sel.value;
+            else if (sel.dataset.last && sel.dataset.last !== '__new__' && sel.dataset.last !== '') inp.value = '';
+            sel.dataset.last = sel.value;
+            inp.style.display = isNew ? '' : 'none';
+            inp.required = isNew;
+            if (isNew && sel.value === '__new__') inp.focus();
+          }
+          sel.dataset.last = sel.value;
+          sel.addEventListener('change', sync);
+          var isNew0 = sel.value === '__new__' || sel.value === '';
+          inp.style.display = isNew0 ? '' : 'none';
+          inp.required = isNew0;
+        })();
+
+        document.getElementById('sendForm').addEventListener('submit', function () {
+            // Every checked destination gets its own full copy of the relevant group, so
+            // the real amount of work is (drawings × how many destinations each group was
+            // sent to) — a plain drawing count would understate this badly once several
+            // workshops/Quality/Planning are all picked for the same group.
+            var angleTargets = document.querySelectorAll('input[name="angleToUserIds"]:checked').length;
+            var plateTargets = document.querySelectorAll('input[name="plateToUserIds"]:checked').length;
+            var otherTargets = document.querySelectorAll('input[name="otherToUserIds"]:checked').length;
+            var imageTargets = document.querySelector('select[name="imageToUserId"]') &&
+                document.querySelector('select[name="imageToUserId"]').value ? 1 : 0;
+            var total = (@angleCount * Math.max(angleTargets, 0)) + (@plateCount * Math.max(plateTargets, 0)) +
+                (@otherCount * Math.max(otherTargets, 0)) + (@imageCount * imageTargets);
+            if (total <= 0) total = @(angleCount + plateCount + otherCount + imageCount);   // fallback if nothing above matched
+
+            var msPerDrawing = 1500;
+            // Sending does real per-drawing work — reading the PDF, rendering it to an
+            // image, compositing the stamp onto it, and several DB round trips — not just
+            // a quick text read like the calibration step. ~1.5s/drawing reflects that.
+            var estimatedMs = Math.max(1500, total * msPerDrawing);
+            var overlay = document.createElement('div');
+            overlay.id = 'smartLoadingOverlay';
+            overlay.innerHTML =
+                '<div class="sl-box">' +
+                    '<div class="sl-spinner"></div>' +
+                    '<div class="sl-title">' + L.sending + (total > 1 ? ' ' + total : '') + '…</div>' +
+                    '<div class="sl-bar-track"><div class="sl-bar-fill" id="slBarFill2"></div></div>' +
+                    '<div class="sl-count" id="slCount2">' + L.starting + '</div>' +
+                    '<div class="sl-note">' + L.keepOpen + '</div>' +
+                '</div>';
+            document.body.appendChild(overlay);
+            document.getElementById('sendBtn').disabled = true;
+
+            var startedAt = Date.now();
+            var fill = document.getElementById('slBarFill2');
+            var countEl = document.getElementById('slCount2');
+            (function tick() {
+                var elapsed = Date.now() - startedAt;
+                var pct = Math.min(92, (elapsed / estimatedMs) * 100);
+                fill.style.width = pct.toFixed(1) + '%';
+                var estimatedDone = Math.min(total - 1, Math.round((pct / 100) * total));
+                countEl.textContent = total > 1 ? ('~' + estimatedDone + ' ' + L.of + ' ' + total + ' ' + L.sent) : L.sendingEllipsis;
+                if (document.body.contains(overlay)) requestAnimationFrame(tick);
+            })();
+        });
+    })();
+</script>

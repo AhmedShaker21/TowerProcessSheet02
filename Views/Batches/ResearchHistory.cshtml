@@ -1,0 +1,69 @@
+@using TowerProcessSheet.Controllers
+@{
+    ViewData["Title"] = "History";
+    ViewData["FullWidth"] = true;
+    var history = ViewBag.History as List<BatchesController.SentBatchRow> ?? new();
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">🕘</div>
+        <div>
+            <h1>Send history</h1>
+            <p>Every batch you've sent out, most recent first. Expand any one to see and fix its drawings.</p>
+        </div>
+        <div class="mb-head-actions">
+            <a class="btn btn-primary" asp-action="ResearchSplit">Send drawings</a>
+        </div>
+    </div>
+
+    <div class="mb-list">
+        @foreach (var b in history)
+        {
+            <details class="mb-row" style="flex-direction:column;align-items:stretch;cursor:default">
+                <summary style="display:flex;align-items:center;gap:16px;width:100%;cursor:pointer;list-style:none">
+                    <div class="mb-row-icon">📄</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">@b.ToName <span class="mb-row-code">Copy No. @b.ToCode</span></div>
+                        <div class="mb-row-sub">@b.Name @(string.IsNullOrEmpty(b.ProjectName) ? "" : $"· {b.ProjectName}")</div>
+                        <div class="mb-row-sub">Created @b.CreatedAt.ToString("yyyy-MM-dd HH:mm") @(b.ReachedAt.HasValue ? $"· Reached recipient {b.ReachedAt.Value:yyyy-MM-dd HH:mm}" : "")</div>
+                    </div>
+                    <div class="mb-row-count">@b.SheetCount <span>sheet@(b.SheetCount == 1 ? "" : "s")</span></div>
+                    <div class="mb-row-actions">
+                        <a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">Open batch</a>
+                    </div>
+                </summary>
+                @if (b.Sheets.Count > 0)
+                {
+                    <div class="sent-thumb-grid">
+                        @foreach (var s in b.Sheets)
+                        {
+                            <div class="sent-thumb">
+                                <a asp-controller="ProcessSheets" asp-action="FullDrawing" asp-route-id="@s.Id" target="_blank" title="Open full window">
+                                    <img src="@Url.Action("FullDrawingImage", "ProcessSheets", new { id = s.Id })" alt="@s.DrawingNo" loading="lazy" />
+                                </a>
+                                <div class="sent-thumb-label">@s.DrawingNo <span>@s.Section</span></div>
+                                <a class="btn btn-sm" style="width:100%;justify-content:center" asp-action="ResearchFixStamp" asp-route-id="@s.Id">✎ Fix stamp</a>
+                            </div>
+                        }
+                    </div>
+                }
+            </details>
+        }
+        @if (history.Count == 0)
+        {
+            <div class="mb-empty">You haven't sent anything yet.</div>
+        }
+    </div>
+</div>
+
+<style>
+    .sent-thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;
+        margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); width: 100%; }
+    .sent-thumb { background: #fbfcff; border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+    .sent-thumb img { width: 100%; height: 140px; object-fit: contain; background: #fff; border-radius: 6px;
+        border: 1px solid var(--line); display: block; }
+    .sent-thumb-label { font-size: 11.5px; font-weight: 700; color: var(--ink); margin: 6px 0; text-align: center;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sent-thumb-label span { display: block; font-weight: 500; color: var(--ink-2); font-size: 10.5px; }
+    details.mb-row summary::-webkit-details-marker { display: none; }
+</style>

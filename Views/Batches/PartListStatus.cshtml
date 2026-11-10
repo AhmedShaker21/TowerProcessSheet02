@@ -1,0 +1,380 @@
+@using TowerProcessSheet.Controllers
+@using TowerProcessSheet.Services
+@model BatchesController.PartListCheck
+@{
+    ViewData["Title"] = "Part List check";
+    ViewData["FullWidth"] = true;
+    string T(string k) => Tr.S(Context, k);
+    string query = (ViewBag.Query as string) ?? "";
+    bool canMark = ViewBag.CanMark is bool cm && cm;
+    int total = Model.Rows.Count;
+    bool anyLoose = Model.Rows.Any(r => r.Part.Loose);
+    bool tpl = Model.Rows.Any(r => r.Part.Template);   // a list that follows the standard template
+}
+<div class="page-head no-print">
+    <h1>@T("plc_title") — @Model.ProjectName</h1>
+    <div class="head-actions">
+        <a class="btn" asp-action="PartList" asp-route-projectId="@Model.ProjectId" target="_blank">@T("plc_open_pdf")</a>
+        @if (total > 0)
+        {
+            <a class="btn" asp-action="PartListStatusExcel" asp-route-projectId="@Model.ProjectId">@T("plc_excel")</a>
+        }
+        <a class="btn" asp-action="Projects">@T("plc_back")</a>
+    </div>
+</div>
+
+<div class="hint">@T("plc_sub") <span class="muted">(@Model.FileName)</span></div>
+
+@if (total == 0)
+{
+    <div class="flash flash-err">@T("plc_no_rows")</div>
+}
+else
+{
+    @Html.AntiForgeryToken()
+    <div class="stat-grid">
+        <div class="stat-card"><b id="stTotal">@total</b><span>@T("plc_total")</span></div>
+        <div class="stat-card ok"><b id="stAuto">0</b><span>@T("plc_converted")</span></div>
+        <div class="stat-card manual"><b id="stManual">0</b><span>@T("plc_manual")</span></div>
+        <div class="stat-card"><b id="stDrawing">0</b><span>@T("plc_drawing")</span></div>
+        <div class="stat-card bad"><b id="stMissing">0</b><span>@T("plc_missing")</span></div>
+    </div>
+
+    <div class="pl-legend no-print">
+        <b>@T("plc_legend_title")</b>
+        <span><i class="sw" style="background:#e8f7ee"></i>@T("plc_lg_auto")</span>
+        <span><i class="sw" style="background:#e3f0ff"></i>@T("plc_lg_manual")</span>
+        <span><i class="sw" style="background:#fff7e0"></i>@T("plc_lg_drawing")</span>
+        <span><i class="sw" style="background:#fff"></i>@T("plc_lg_none")</span>
+        <span><i class="sw" style="background:#ffe08a"></i>@T("plc_lg_hit")</span>
+        <span><i class="sw" style="background:#ffc233"></i>@T("plc_lg_current")</span>
+        <span><i class="sw" style="background:#d7e7ff"></i>@T("plc_lg_selected")</span>
+    </div>
+
+    <div class="pl-search no-print">
+        <input type="search" id="plSearch" class="input" value="@query" placeholder="@T("plc_search_ph")" autocomplete="off" autofocus />
+        <button type="button" class="btn btn-sm" id="plPrev" title="Shift+Enter">▲</button>
+        <button type="button" class="btn btn-sm" id="plNext" title="Enter">▼</button>
+        <label class="pl-only"><input type="checkbox" id="plOnlyHits" checked /> @T("plc_only_hits")</label>
+        <span class="muted" id="plSearchInfo"></span>
+    </div>
+
+    <div class="place-toolbar no-print" style="margin:10px 0 14px">
+        <button type="button" class="btn btn-sm btn-primary pl-filter" data-filter="all">@T("plc_filter_all")</button>
+        <button type="button" class="btn btn-sm pl-filter" data-filter="unmarked">@T("plc_filter_unmarked")</button>
+        <button type="button" class="btn btn-sm pl-filter" data-filter="missing">@T("plc_filter_missing")</button>
+        <button type="button" class="btn btn-sm pl-filter" data-filter="manual">@T("plc_filter_manual")</button>
+    </div>
+
+    @if (anyLoose)
+    {
+        <div class="hint">@T("plc_loose_note")</div>
+    }
+    @if (canMark)
+    {
+        <div class="hint no-print">@T("plc_manual_tip")</div>
+    }
+
+    <table class="list-table" id="plTable" data-project="@Model.ProjectId">
+        <thead>
+            @if (tpl)
+            {
+                <tr><th>@T("plc_th_status")</th><th>@T("plc_th_mark")</th><th>Mark No.</th><th>Profie</th><th>Weight(kg/m)</th><th>Qty/LEG</th><th>Length(m)</th><th>Description</th><th>@T("plc_th_sheet")</th></tr>
+            }
+            else
+            {
+                <tr><th>@T("plc_th_status")</th><th>@T("plc_th_mark")</th><th>POS</th><th>QTY</th><th>SECTION</th><th>LENGTH</th><th>WEIGHT</th><th>ST. GR.</th><th>@T("plc_th_sheet")</th></tr>
+            }
+        </thead>
+        <tbody>
+            @foreach (var r in Model.Rows)
+            {
+                <tr class="pl-row pl-state-@r.State @(r.Manual ? "pl-manual" : "")"
+                    data-key="@r.Part.RowKey" data-state="@r.State" data-manual="@(r.Manual ? 1 : 0)"
+                    data-keys="@(string.Join(" ", r.Part.Keys))" data-search="@PartListReader.Normalize(r.Part.Raw)"
+                    title="@(r.Manual ? T("plc_by_hand_tip") + " " + r.MarkedBy : "")">
+                    <td class="pl-icon">@(r.State == 2 ? "✓" : r.Manual ? "✋" : r.State == 1 ? "◐" : "○")</td>
+                    <td class="pl-mark">
+                        @if (r.State == 2)
+                        {
+                            <input type="checkbox" checked disabled title="@T("plc_auto")" />
+                        }
+                        else
+                        {
+                            <input type="checkbox" class="pl-chk" @(r.Manual ? "checked" : "") @(canMark ? "" : "disabled") />
+                        }
+                    </td>
+                    @if (r.Part.Loose)
+                    {
+                        <td colspan="6" class="pl-raw" dir="auto">@r.Part.Raw</td>
+                    }
+                    else if (r.Part.Template)
+                    {
+                        <td><strong>@r.Part.Pos</strong></td>
+                        <td>@r.Part.Section</td>
+                        <td>@r.Part.Weight</td>
+                        <td>@r.Part.Qty</td>
+                        <td>@r.Part.Length</td>
+                        <td dir="auto">@r.Part.Remark</td>
+                    }
+                    else
+                    {
+                        <td><strong>@r.Part.Pos</strong></td>
+                        <td>@r.Part.Qty</td>
+                        <td>@r.Part.Section</td>
+                        <td>@(string.IsNullOrEmpty(r.Part.Width) ? r.Part.Length : r.Part.Width + " × " + r.Part.Length)</td>
+                        <td>@r.Part.Weight</td>
+                        <td>@r.Part.Grade</td>
+                    }
+                    <td>
+                        @if (r.SheetId.HasValue)
+                        {
+                            <a asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@r.SheetId" target="_blank">@r.SheetPartNo</a>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (Model.UnmatchedSheets.Count > 0)
+    {
+        <h2 class="section-h" style="margin-top:28px">@T("plc_unmatched_title") (@Model.UnmatchedSheets.Count)</h2>
+        <div class="hint">@T("plc_unmatched_hint")</div>
+        <table class="list-table">
+            <tbody>
+                @foreach (var u in Model.UnmatchedSheets)
+                {
+                    <tr>
+                        <td><a asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@u.Id" target="_blank"><strong>@u.PartNo</strong></a></td>
+                        <td>@(u.Converted ? "✓" : "◐")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+<style>
+    .pl-state-2 td {
+        background: #e8f7ee;
+    }
+
+    .pl-state-1 td {
+        background: #fff7e0;
+    }
+
+    .pl-manual td {
+        background: #e3f0ff !important;
+    }
+
+    .stat-card.manual b {
+        color: #1d5fb8;
+    }
+
+    .pl-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        align-items: center;
+        margin: 14px 0 0;
+        padding: 10px 14px;
+        border: 1px solid var(--line, #d8dde6);
+        border-radius: 8px;
+        font-size: .88rem;
+    }
+
+        .pl-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pl-legend .sw {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border: 1px solid rgba(0,0,0,.25);
+        }
+
+    .pl-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 12px 0 0;
+    }
+
+        .pl-search .input {
+            max-width: 320px;
+        }
+
+    .pl-only {
+        font-size: .9rem;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .pl-raw {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: .88rem;
+    }
+    /* the row the search landed on: the whole row, every cell */
+    #plTable tr.pl-hit td {
+        outline: none;
+        box-shadow: inset 0 2px 0 #f59e0b, inset 0 -2px 0 #f59e0b;
+        background: #ffe08a !important;
+    }
+
+        #plTable tr.pl-hit td:first-child {
+            box-shadow: inset 0 2px 0 #f59e0b, inset 0 -2px 0 #f59e0b, inset 3px 0 0 #f59e0b;
+        }
+
+    #plTable tr.pl-current td {
+        background: #ffc233 !important;
+        font-weight: 600;
+    }
+
+    #plTable tr.pl-selected td {
+        background: #d7e7ff !important;
+    }
+
+    .pl-chk {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+</style>
+
+@section Scripts {
+    <script>
+        (function () {
+          var table = document.getElementById('plTable');
+          if (!table) return;
+          var rows = Array.prototype.slice.call(table.querySelectorAll('.pl-row'));
+          var filterBtns = document.querySelectorAll('.pl-filter');
+          var search = document.getElementById('plSearch');
+          var onlyHits = document.getElementById('plOnlyHits');
+          var info = document.getElementById('plSearchInfo');
+          var filter = 'all', hits = [], cur = -1;
+          var infoTpl = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("plc_search_count")));
+          var noneTxt = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("plc_search_none")));
+
+          function norm(s) { return (s || '').toUpperCase().replace(/[^0-9A-Z؀-ۿ]/g, ''); }
+
+          function stats() {
+            var auto = 0, manual = 0, drawing = 0, missing = 0;
+            rows.forEach(function (r) {
+              var st = r.dataset.state, man = r.dataset.manual === '1';
+              if (st === '2') auto++;
+              else if (man) manual++;
+              else if (st === '1') drawing++;
+              else missing++;
+            });
+            document.getElementById('stAuto').textContent = auto;
+            document.getElementById('stManual').textContent = manual;
+            document.getElementById('stDrawing').textContent = drawing;
+            document.getElementById('stMissing').textContent = missing;
+            filterBtns.forEach(function (b) {
+              var base = b.dataset.base || (b.dataset.base = b.textContent.replace(/\s*\(\d+\)$/, ''));
+              var n = b.dataset.filter === 'unmarked' ? drawing + missing : b.dataset.filter === 'missing' ? missing : b.dataset.filter === 'manual' ? manual : null;
+              b.textContent = n === null ? base : base + ' (' + n + ')';
+            });
+          }
+
+          function passesFilter(r) {
+            var st = r.dataset.state, man = r.dataset.manual === '1';
+            if (filter === 'unmarked') return st !== '2' && !man;
+            if (filter === 'missing') return st === '0' && !man;
+            if (filter === 'manual') return man && st !== '2';
+            return true;
+          }
+
+          function apply() {
+            var nq = norm(search.value);
+            hits = [];
+            rows.forEach(function (r) { r.classList.remove('pl-hit', 'pl-current'); });
+            if (nq) {
+              // A whole-part match beats a partial one, so "10H" lands on 10H and not on 210H.
+              var exact = rows.filter(function (r) { return (' ' + r.dataset.keys + ' ').indexOf(' ' + nq + ' ') >= 0; });
+              hits = exact.length ? exact : rows.filter(function (r) { return r.dataset.search.indexOf(nq) >= 0; });
+              hits.forEach(function (r) { r.classList.add('pl-hit'); });
+            }
+            rows.forEach(function (r) {
+              var show = passesFilter(r);
+              if (nq && onlyHits.checked) show = show && hits.indexOf(r) >= 0;
+              r.style.display = show ? '' : 'none';
+            });
+            info.textContent = !nq ? '' : hits.length ? infoTpl.replace('{0}', hits.length) : noneTxt;
+            cur = -1;
+            if (hits.length) go(0);
+          }
+
+          function go(i) {
+            if (!hits.length) return;
+            cur = (i + hits.length) % hits.length;
+            rows.forEach(function (r) { r.classList.remove('pl-current'); });
+            var r = hits[cur];
+            r.style.display = '';
+            r.classList.add('pl-current');
+            r.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+
+          filterBtns.forEach(function (b) {
+            b.addEventListener('click', function () {
+              filter = b.dataset.filter;
+              filterBtns.forEach(function (x) { x.classList.toggle('btn-primary', x === b); });
+              apply();
+            });
+          });
+          var t = null;
+          search.addEventListener('input', function () { clearTimeout(t); t = setTimeout(apply, 120); });
+          search.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); go(cur + (e.shiftKey ? -1 : 1)); }
+          });
+          onlyHits.addEventListener('change', apply);
+          document.getElementById('plNext').addEventListener('click', function () { go(cur + 1); });
+          document.getElementById('plPrev').addEventListener('click', function () { go(cur - 1); });
+
+          // Click anywhere on a row to select it (whole-row highlight) — handy while ticking by hand.
+          table.addEventListener('click', function (e) {
+            var tr = e.target.closest('.pl-row');
+            if (!tr || e.target.closest('a,input')) return;
+            rows.forEach(function (r) { r.classList.remove('pl-selected'); });
+            tr.classList.add('pl-selected');
+          });
+
+          // Tick / untick a row by hand.
+          var token = document.querySelector('input[name="__RequestVerificationToken"]');
+          table.addEventListener('change', function (e) {
+            var chk = e.target.closest('.pl-chk');
+            if (!chk) return;
+            var tr = chk.closest('.pl-row');
+            var want = chk.checked;
+            var fd = new FormData();
+            fd.append('projectId', table.dataset.project);
+            fd.append('rowKey', tr.dataset.key);
+            fd.append('marked', want ? 'true' : 'false');
+            if (token) fd.append('__RequestVerificationToken', token.value);
+            chk.disabled = true;
+            fetch('@Url.Action("TogglePartListMark", "Batches")', { method: 'POST', body: fd, credentials: 'same-origin' })
+              .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+              .then(function (j) {
+                tr.dataset.manual = j.marked ? '1' : '0';
+                tr.classList.toggle('pl-manual', !!j.marked);
+                tr.querySelector('.pl-icon').textContent = j.marked ? '✋' : (tr.dataset.state === '1' ? '◐' : '○');
+                tr.title = j.marked ? (@Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("plc_by_hand_tip"))) + ' ' + j.by) : '';
+                stats();
+                if (filter !== 'all') apply();
+              })
+              .catch(function () { chk.checked = !want; alert(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("plc_mark_fail")))); })
+              .then(function () { chk.disabled = false; });
+          });
+
+          stats();
+          if (search.value) apply();
+        })();
+    </script>
+}

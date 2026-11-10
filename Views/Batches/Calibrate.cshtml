@@ -1,0 +1,308 @@
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Calibrate drawing layout";
+    string token = ViewBag.Token;
+    int batchId = ViewBag.BatchId ?? 0;
+    int fileCount = ViewBag.FileCount;
+    string previewImage = ViewBag.PreviewImage;
+    var fields = ViewBag.Fields as (string Key, string Label)[] ?? Array.Empty<(string, string)>();
+    bool isResearch = ViewBag.IsResearch ?? false;
+    bool isConvert = ViewBag.IsConvert ?? false;
+    bool isConvertThisSheetOnly = ViewBag.IsConvertThisSheetOnly ?? false;
+    bool isReassignOthers = ViewBag.IsReassignOthers ?? false;
+    int sheetId = ViewBag.SheetId ?? 0;
+    int? sheetBatchId = ViewBag.SheetBatchId as int?;
+    string? sampleFileName = ViewBag.SampleFileName;
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("cal_title")</h1>
+    @if ((isResearch || isReassignOthers) && !string.IsNullOrEmpty(sampleFileName))
+    {
+        <a class="btn" style="margin-inline-end:8px" asp-action="ResearchSkipSample" asp-route-token="@token"
+           asp-route-fileName="@sampleFileName" asp-route-isReassign="@isReassignOthers">
+            @T("cal_skip_btn")
+        </a>
+    }
+    @if (isConvert || isConvertThisSheetOnly)
+    {
+        if (sheetBatchId.HasValue)
+        {
+            <a class="btn" asp-controller="Batches" asp-action="Details" asp-route-id="@sheetBatchId.Value">@T("cancel")</a>
+        }
+        else
+        {
+            <a class="btn" asp-controller="ProcessSheets" asp-action="FullDrawing" asp-route-id="@sheetId">@T("cancel")</a>
+        }
+    }
+    else if (isReassignOthers)
+    {
+        <a class="btn" asp-action="ResearchPlaceStamp" asp-route-token="@token" asp-route-angleCount="0" asp-route-plateCount="0" asp-route-otherCount="0">@T("cancel")</a>
+    }
+    else if (isResearch)
+    {
+        <a class="btn" asp-action="ResearchSplit">@T("cal_start_over")</a>
+    }
+    else
+    {
+        <a class="btn" asp-action="ImportPdfBatch" asp-route-batchId="@batchId">@T("cal_start_over")</a>
+    }
+</div>
+
+@if (isConvert)
+{
+    <div class="hint">
+        @T("cal_hint_convert")
+    </div>
+}
+else
+{
+    <div class="hint">
+        @T("cal_hint_r_pre") <b>@fileCount</b>@T("cal_hint_r_post")
+    </div>
+}
+
+<div class="place-toolbar no-print">
+    <label>
+        @T("cal_field_label")
+        <select class="input" id="fieldSelect">
+            <option value="">@T("cal_choose")</option>
+            @foreach (var f in fields)
+            {
+                <option value="@f.Key">@f.Label</option>
+            }
+        </select>
+    </label>
+    @if (!isConvert)
+    {
+        <label>
+            @T("cal_name_using")
+            <select class="input" id="nameFieldSelect" name="nameField" form="calForm">
+                <option value="">@T("cal_dont_rename")</option>
+                @foreach (var f in fields.Where(x => x.Key != "diagram"))
+                {
+                    <option value="@f.Key" selected="@(f.Key == "partNo")">@f.Label</option>
+                }
+            </select>
+        </label>
+    }
+    <button type="button" id="clearAll" class="btn btn-sm">@T("cal_clear_all")</button>
+    @if (isConvertThisSheetOnly)
+    {
+        <button type="button" id="applyBtnThisSheet" class="btn btn-primary">@T("cal_save_this_sheet")</button>
+        <button type="button" id="applyBtnBatchDefault" class="btn btn-primary btn-lg">@T("cal_save_batch_default")</button>
+    }
+    else
+    {
+        <button type="button" id="applyBtn" class="btn btn-primary btn-lg">@(isConvert ? T("cal_apply_convert") : $"{T("cal_apply_import_pre")} {fileCount} {T("cal_apply_import_post")}")</button>
+    }
+</div>
+
+<div class="cal-chip-row" id="chipRow"></div>
+
+<form asp-action="@(isConvertThisSheetOnly ? "ConvertApplyThisSheetOnly" : isConvert ? "ConvertApplyCalibration" : isReassignOthers ? "ResearchApplyReassign" : isResearch ? "ResearchApplyCalibration" : "ApplyCalibration")" method="post" id="calForm">
+    @Html.AntiForgeryToken()
+    @if (isConvert || isConvertThisSheetOnly)
+    {
+        <input type="hidden" name="id" value="@sheetId" />
+    }
+    else
+    {
+        <input type="hidden" name="token" value="@token" />
+        @if (!isResearch)
+        {
+            <input type="hidden" name="batchId" value="@batchId" />
+        }
+    }
+    <input type="hidden" name="rectsJson" id="rectsJson" />
+</form>
+
+<div class="cal-canvas-wrap" id="calWrap">
+    <img src="@previewImage" alt="drawing preview" id="calImg" />
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+          var wrap = document.getElementById('calWrap');
+          var img = document.getElementById('calImg');
+          var sel = document.getElementById('fieldSelect');
+          var chipRow = document.getElementById('chipRow');
+          var fieldLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(fields.ToDictionary(f => f.Key, f => f.Label)));
+          var colors = ['#2f6fed','#e07a17','#1f9d55','#d0141c','#8a3ffc','#0aa5a0','#c2185b','#5d4037'];
+          var rects = {};   // key -> {x,y,w,h} normalized
+          var boxes = {};   // key -> DOM element
+          var L = {
+            pickFieldFirst: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_pick_field_first"))),
+            noFieldsConfirm: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_no_fields_confirm"))),
+            importing: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_importing"))),
+            drawings: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_drawings"))),
+            drawing: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_drawing"))),
+            starting: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_starting"))),
+            of: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_of"))),
+            processed: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_processed"))),
+            processing: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_processing"))),
+            keepOpen: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("cal_keep_open")))
+          };
+
+          function colorFor(key) {
+            var keys = Object.keys(fieldLabels);
+            return colors[keys.indexOf(key) % colors.length];
+          }
+
+          function renderChips() {
+            chipRow.innerHTML = '';
+            Object.keys(fieldLabels).forEach(function (k) {
+              var span = document.createElement('span');
+              span.className = 'chip ' + (rects[k] ? 'chip-galv' : 'chip-plate');
+              span.style.borderColor = colorFor(k);
+              span.textContent = fieldLabels[k] + (rects[k] ? ' ✓' : '');
+              chipRow.appendChild(span);
+            });
+          }
+          renderChips();
+
+          function drawBox(key) {
+            if (boxes[key]) boxes[key].remove();
+            var r = rects[key]; if (!r) return;
+            var b = document.createElement('div');
+            b.className = 'cal-box';
+            b.style.left = (r.x * 100) + '%'; b.style.top = (r.y * 100) + '%';
+            b.style.width = (r.w * 100) + '%'; b.style.height = (r.h * 100) + '%';
+            b.style.borderColor = colorFor(key);
+            b.innerHTML = '<span class="cal-box-label" style="background:' + colorFor(key) + '">' + fieldLabels[key] + '</span>';
+            wrap.appendChild(b);
+            boxes[key] = b;
+          }
+
+          var dragging = false, startX = 0, startY = 0, tempBox = null;
+          wrap.addEventListener('pointerdown', function (e) {
+            var key = sel.value;
+            if (!key) { alert(L.pickFieldFirst); return; }
+            var r = wrap.getBoundingClientRect();
+            startX = (e.clientX - r.left) / r.width; startY = (e.clientY - r.top) / r.height;
+            dragging = true;
+            tempBox = document.createElement('div');
+            tempBox.className = 'cal-box cal-box-live';
+            tempBox.style.borderColor = colorFor(key);
+            wrap.appendChild(tempBox);
+            wrap.setPointerCapture(e.pointerId);
+          });
+          wrap.addEventListener('pointermove', function (e) {
+            if (!dragging) return;
+            var r = wrap.getBoundingClientRect();
+            var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+            var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+            var left = Math.min(x, startX), top = Math.min(y, startY);
+            var w = Math.abs(x - startX), h = Math.abs(y - startY);
+            tempBox.style.left = (left * 100) + '%'; tempBox.style.top = (top * 100) + '%';
+            tempBox.style.width = (w * 100) + '%'; tempBox.style.height = (h * 100) + '%';
+          });
+          wrap.addEventListener('pointerup', function (e) {
+            if (!dragging) return;
+            dragging = false;
+            var key = sel.value;
+            var r = wrap.getBoundingClientRect();
+            var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+            var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+            var left = Math.min(x, startX), top = Math.min(y, startY);
+            var w = Math.abs(x - startX), h = Math.abs(y - startY);
+            if (tempBox) { tempBox.remove(); tempBox = null; }
+            if (w < 0.01 || h < 0.01) return;   // ignore accidental clicks
+            rects[key] = { x: left, y: top, w: w, h: h };
+            drawBox(key);
+            renderChips();
+          });
+
+          document.getElementById('clearAll').addEventListener('click', function () {
+            rects = {};
+            Object.values(boxes).forEach(function (b) { b.remove(); });
+            boxes = {};
+            renderChips();
+          });
+
+          function collectRects() {
+            var out = {};
+            Object.keys(rects).forEach(function (k) {
+              var r = rects[k];
+              out[k] = [r.x, r.y, r.w, r.h];
+            });
+            document.getElementById('rectsJson').value = JSON.stringify(out);
+          }
+
+          var applyBtn = document.getElementById('applyBtn');
+          if (applyBtn)
+          {
+            applyBtn.addEventListener('click', function () {
+              if (Object.keys(rects).length === 0) {
+                if (!confirm(L.noFieldsConfirm)) return;
+              }
+              collectRects();
+              showSmartLoading();
+              document.getElementById('calForm').submit();
+            });
+          }
+
+          // Recalibrating a single sheet offers a choice at save time: fix just this one
+          // drawing, or realize the whole batch's saved positions are wrong and replace them —
+          // same marked boxes either way, just a different destination action to post to.
+          var applyBtnThisSheet = document.getElementById('applyBtnThisSheet');
+          var applyBtnBatchDefault = document.getElementById('applyBtnBatchDefault');
+          if (applyBtnThisSheet && applyBtnBatchDefault)
+          {
+            var calForm = document.getElementById('calForm');
+            var thisSheetAction = calForm.getAttribute('action');
+            var batchDefaultAction = thisSheetAction.replace('ConvertApplyThisSheetOnly', 'ConvertApplyCalibration');
+            function submitWithChoice(targetAction) {
+              if (Object.keys(rects).length === 0) {
+                if (!confirm(L.noFieldsConfirm)) return;
+              }
+              collectRects();
+              calForm.setAttribute('action', targetAction);
+              applyBtnThisSheet.disabled = true;
+              applyBtnBatchDefault.disabled = true;
+              calForm.submit();
+            }
+            applyBtnThisSheet.addEventListener('click', function () { submitWithChoice(thisSheetAction); });
+            applyBtnBatchDefault.addEventListener('click', function () { submitWithChoice(batchDefaultAction); });
+          }
+
+          // This whole batch is processed in a single request with no real progress feedback
+          // from the server, so a fake-but-reasonable progress bar (paced off a rough
+          // per-drawing time estimate) is what keeps a 1000+ drawing import from looking like
+          // the page just froze. It only ever disappears when the browser actually navigates
+          // away (success redirect or an error page reload) — there's nothing to hide it early.
+          function showSmartLoading() {
+            var total = @fileCount;
+            var msPerDrawing = 90;                                    // rough estimate, tuned to feel right rather than exact
+            var estimatedMs = Math.max(1500, total * msPerDrawing);
+            var overlay = document.createElement('div');
+            overlay.id = 'smartLoadingOverlay';
+            overlay.innerHTML =
+              '<div class="sl-box">' +
+                '<div class="sl-spinner"></div>' +
+                '<div class="sl-title">' + L.importing + (total > 1 ? ' ' + total + ' ' + L.drawings : ' ' + L.drawing) + '…</div>' +
+                '<div class="sl-bar-track"><div class="sl-bar-fill" id="slBarFill"></div></div>' +
+                '<div class="sl-count" id="slCount">' + L.starting + '</div>' +
+                '<div class="sl-note">' + L.keepOpen + '</div>' +
+              '</div>';
+            document.body.appendChild(overlay);
+            document.getElementById('applyBtn').disabled = true;
+
+            var startedAt = Date.now();
+            var fill = document.getElementById('slBarFill');
+            var countEl = document.getElementById('slCount');
+            (function tick() {
+              var elapsed = Date.now() - startedAt;
+              // Eases toward ~92% and holds — never claims to finish before the server
+              // actually redirects, since there's no way to know the true finish time.
+              var pct = Math.min(92, (elapsed / estimatedMs) * 100);
+              fill.style.width = pct.toFixed(1) + '%';
+              var estimatedDone = Math.min(total - 1, Math.round((pct / 100) * total));
+              countEl.textContent = total > 1 ? ('~' + estimatedDone + ' ' + L.of + ' ' + total + ' ' + L.processed) : L.processing;
+              if (document.body.contains(overlay)) requestAnimationFrame(tick);
+            })();
+          }
+        })();
+    </script>
+}

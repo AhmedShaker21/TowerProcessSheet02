@@ -1,0 +1,184 @@
+@using TowerProcessSheet.Models
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Inbox";
+    ViewData["FullWidth"] = true;
+    var inbox = ViewBag.Inbox as List<Batch> ?? new();
+    var mine = ViewBag.Mine as List<Batch> ?? new();
+    var assigned = ViewBag.AssignedSheets as List<TowerProcessSheet.Controllers.BatchesController.AssignedSheetRow> ?? new();
+    var sentForReview = ViewBag.SentForQualityReview as List<TowerProcessSheet.Controllers.BatchesController.AssignedSheetRow> ?? new();
+    var all = ViewBag.All as List<Batch>;
+    int approved = ViewBag.ApprovedCount ?? 0;
+    int rejectedWaiting = ViewBag.RejectedWaiting ?? 0;
+    string T(string k) => Tr.S(Context, k);
+    string StatusColor(BatchStatus s) => s switch
+    {
+        BatchStatus.Approved => "mb-chip-ok",
+        BatchStatus.Rejected => "mb-chip-bad",
+        BatchStatus.InReview => "mb-chip-info",
+        _ => "mb-chip-neutral",
+    };
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">📥</div>
+        <div>
+            <h1>@T("ix_title")</h1>
+            <p>@T("ix_sub")</p>
+        </div>
+        <div class="mb-head-actions">
+            <a class="btn btn-primary" asp-action="Create">@T("ix_new_batch")</a>
+        </div>
+    </div>
+
+    <div class="mb-stats-row">
+        <div class="mb-stat-card @(inbox.Count > 0 ? "mb-stat-live" : "")">
+            <div class="mb-stat-num">@inbox.Count</div>
+            <div class="mb-stat-label">@T("ix_waiting")</div>
+        </div>
+        <div class="mb-stat-card">
+            <div class="mb-stat-num">@mine.Count</div>
+            <div class="mb-stat-label">@T("ix_my_batches")</div>
+        </div>
+        <div class="mb-stat-card mb-stat-ok">
+            <div class="mb-stat-num">@approved</div>
+            <div class="mb-stat-label">@T("ix_approved")</div>
+        </div>
+        @if (rejectedWaiting > 0)
+        {
+            <div class="mb-stat-card mb-stat-bad">
+                <div class="mb-stat-num">@rejectedWaiting</div>
+                <div class="mb-stat-label">@T("ix_rejected")</div>
+            </div>
+        }
+    </div>
+
+    @if (sentForReview.Count > 0)
+    {
+        <h2 class="mb-section-h">@T("ix_sent_review") <span class="muted" style="font-weight:600">(@sentForReview.Count @(sentForReview.Count == 1 ? T("sn_sheet") : T("sn_sheets")))</span></h2>
+        <div class="mb-list">
+            @foreach (var s in sentForReview)
+            {
+                <div class="mb-row">
+                    <div class="mb-row-icon">📋</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">@s.PartNo <span class="mb-row-code">@s.Section</span></div>
+                        <div class="mb-row-sub">@T("ix_from") @(s.FromName ?? "—") · @s.BatchName</div>
+                    </div>
+                    <div class="mb-row-actions">
+                        <a class="btn btn-sm" asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@s.Id">@T("ix_view_process")</a>
+                        @if (s.BatchId.HasValue)
+                        {
+                            <a class="btn btn-sm btn-primary" asp-controller="Batches" asp-action="PlaceStamps" asp-route-id="@s.BatchId">@T("ix_place_stamp")</a>
+                            <a class="btn btn-sm" asp-controller="Batches" asp-action="Details" asp-route-id="@s.BatchId">@T("ix_open_batch")</a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (assigned.Count > 0)
+    {
+        int assignedDone = assigned.Count(a => a.ConvertedToProcess);
+        int assignedPct = assigned.Count == 0 ? 0 : (int)(100.0 * assignedDone / assigned.Count);
+        <h2 class="mb-section-h">@T("ix_assigned")</h2>
+        <div class="progress-wrap" style="margin:2px 0 14px;max-width:320px">
+            <div class="progress-bar"><span style="width:@(assignedPct)%"></span></div>
+            <div class="progress-label">@assignedDone / @assigned.Count @T("ix_converted_to")</div>
+        </div>
+        <div class="mb-list">
+            @foreach (var s in assigned)
+            {
+                <div class="mb-row">
+                    <div class="mb-row-icon">@(s.ConvertedToProcess ? "✅" : "📐")</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">@s.PartNo <span class="mb-row-code">@s.Section</span></div>
+                        <div class="mb-row-sub">@T("ix_from") @(s.FromName ?? "—") · @s.BatchName</div>
+                    </div>
+                    <div class="mb-chip @(s.ConvertedToProcess ? "mb-chip-ok" : "mb-chip-neutral")">@(s.ConvertedToProcess ? T("ix_converted") : T("ix_not_converted"))</div>
+                    <div class="mb-row-actions">
+                        @if (s.ConvertedToProcess)
+                        {
+                            <a class="btn btn-sm" asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@s.Id">@T("ix_view_process")</a>
+                        }
+                        else
+                        {
+                            <a class="btn btn-sm btn-primary" asp-controller="ProcessSheets" asp-action="ConvertToProcess" asp-route-id="@s.Id">@T("ix_convert_btn")</a>
+                        }
+                        @if (s.BatchId.HasValue)
+                        {
+                            <a class="btn btn-sm" asp-controller="Batches" asp-action="Details" asp-route-id="@s.BatchId">@T("ix_open_batch")</a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <h2 class="mb-section-h">@T("ix_waiting_for_you")</h2>
+    <div class="mb-list">
+        @foreach (var b in inbox)
+        {
+            <div class="mb-row">
+                <div class="mb-row-icon">📨</div>
+                <div class="mb-row-body">
+                    <div class="mb-row-title">@b.Name</div>
+                    <div class="mb-row-sub">@b.ProjectName · @T("ix_from") @b.CreatedBy?.FullName · @b.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                </div>
+                <div class="mb-row-actions">
+                    <a class="btn btn-sm btn-primary" asp-action="Details" asp-route-id="@b.Id">@T("ix_open")</a>
+                </div>
+            </div>
+        }
+        @if (inbox.Count == 0)
+        {
+            <div class="mb-empty">@T("ix_nothing_waiting")</div>
+        }
+    </div>
+
+    <h2 class="mb-section-h">@T("ix_batches_created")</h2>
+    <div class="mb-list">
+        @foreach (var b in mine)
+        {
+            <div class="mb-row">
+                <div class="mb-row-icon">📄</div>
+                <div class="mb-row-body">
+                    <div class="mb-row-title">@b.Name <span class="mb-chip @StatusColor(b.Status)">@b.Status</span></div>
+                    <div class="mb-row-sub">@b.ProjectName · @T("ix_now_with") @(b.CurrentHolder?.FullName ?? "—") · @b.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                </div>
+                <div class="mb-row-actions">
+                    <a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">@T("ix_view")</a>
+                </div>
+            </div>
+        }
+        @if (mine.Count == 0)
+        {
+            <div class="mb-empty">@T("ix_no_batches") <a asp-action="Create">@T("ix_create_one")</a>.</div>
+        }
+    </div>
+
+    @if (all != null)
+    {
+        <h2 class="mb-section-h">@T("ix_all_admin")</h2>
+        <div class="mb-list">
+            @foreach (var b in all)
+            {
+                <div class="mb-row">
+                    <div class="mb-row-icon">🗂</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">@b.Name <span class="mb-chip @StatusColor(b.Status)">@b.Status</span></div>
+                        <div class="mb-row-sub">@b.ProjectName · @T("ix_created_by") @b.CreatedBy?.FullName · @T("ix_now_with") @(b.CurrentHolder?.FullName ?? "—") · @b.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                    </div>
+                    <div class="mb-row-actions">
+                        <a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">@T("ix_view")</a>
+                    </div>
+                </div>
+            }
+            @if (all.Count == 0)
+            {
+                <div class="mb-empty">@T("ix_none_yet")</div>
+            }
+        </div>
+    }
+</div>

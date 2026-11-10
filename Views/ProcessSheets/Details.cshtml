@@ -1,0 +1,120 @@
+@model ProcessSheet
+@{
+    ViewData["Title"] = $"Sheet {Model.DrawingNo}";
+    var plate = OperationCatalog.IsPlate(Model.Section);
+}
+
+<div class="sheet-toolbar no-print">
+    <div class="sheet-toolbar-id">
+        <span class="eyebrow">Process Sheet</span>
+        <h1>Drawing&nbsp;<span class="mono">@Model.DrawingNo</span></h1>
+        <div class="sheet-meta">
+            <span class="chip @(plate ? "chip-plate" : "chip-angle")">@(plate ? "Plate" : "Angle")</span>
+            <span class="mono">@Model.Section</span>
+            <span class="sep">·</span>
+            <span>@Model.ProjectName</span>
+            <span class="sep">·</span>
+            <span>Qty&nbsp;<strong>@Model.Qty</strong></span>
+            @if (Model.IncludeGalvanizing)
+            {
+                <span class="sep">·</span>
+                <span class="chip chip-galv">Galvanized</span>
+            }
+        </div>
+    </div>
+    <div class="head-actions">
+        <button type="button" class="btn btn-primary" onclick="printSheet(true)">Print with drawing</button>
+        <button type="button" class="btn" onclick="printSheet(false)">Print without drawing</button>
+        <a class="btn" asp-action="Edit" asp-route-id="@Model.Id">Edit</a>
+        @{
+            bool hasAnyDrawing = (Model.FullDrawingImage != null && Model.FullDrawingImage.Length > 0)
+                || (Model.DiagramImage != null && Model.DiagramImage.Length > 0);
+        }
+        @if (hasAnyDrawing)
+        {
+            <a class="btn" asp-action="FullDrawing" asp-route-id="@Model.Id" target="_blank">⤢ Open drawing full window</a>
+        }
+        @if (Model.BatchId.HasValue && !(ViewBag.IsQualityInspector ?? false))
+        {
+            <a class="btn" asp-controller="Batches" asp-action="Details" asp-route-id="@Model.BatchId">Back to batch</a>
+        }
+        else if (!Model.BatchId.HasValue)
+        {
+            <a class="btn" asp-action="Index">Back</a>
+        }
+    </div>
+</div>
+
+@if (Model.IsScannedImage)
+{
+    <div class="flash flash-err no-print" style="margin-bottom:16px">
+        🖼 This drawing is a scanned image with no text layer at all — nothing could be auto-read from it no matter
+        where a box is marked. Please type its fields in by hand below.
+    </div>
+}
+else if (Model.IsUnclassified)
+{
+    <div class="flash flash-err no-print" style="margin-bottom:16px">
+        ⚠ This drawing came from Research's "Other" bucket — its Section couldn't be read automatically there,
+        so its fields here were filled in using this batch's shared layout, which may not actually match this
+        specific drawing. Please double-check the fields below are correct.
+        <a class="btn btn-sm" style="margin-inline-start:10px" asp-action="ConvertCalibrateThisSheet" asp-route-id="@Model.Id">Reassign for this sheet</a>
+    </div>
+}
+
+@{
+    bool isRejected = ViewBag.IsRejected ?? false;
+    bool alreadyResent = ViewBag.AlreadyResent ?? false;
+    bool canResend = ViewBag.CanResend ?? false;
+    var latestQualityReview = ViewBag.LatestQualityReview as TowerProcessSheet.Models.SheetReview;
+}
+@if (isRejected)
+{
+    <div class="flash flash-err no-print" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span>
+            <strong>Rejected by Quality@(latestQualityReview != null ? $" ({latestQualityReview.ReviewerName})" : "")</strong>
+            @if (!string.IsNullOrWhiteSpace(latestQualityReview?.Comment))
+            {
+                <span> — @latestQualityReview!.Comment</span>
+            }
+        </span>
+        @if (alreadyResent)
+        {
+            <span class="chip chip-galv" style="margin-inline-start:auto">🔄 Resent — waiting for Quality to re-check</span>
+        }
+        else if (canResend)
+        {
+            <form asp-action="ResendForReview" asp-route-id="@Model.Id" method="post" style="margin-inline-start:auto">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-primary">Resend to Quality after fixing</button>
+            </form>
+        }
+    </div>
+}
+
+@{
+    int? nextToConvertId = ViewBag.NextToConvertId;
+}
+@if (nextToConvertId.HasValue)
+{
+    <div class="flash flash-ok no-print" style="display:flex;align-items:center;gap:10px">
+        <span>Saved. There's at least one more drawing in this batch waiting to be converted.</span>
+        <a class="btn btn-sm btn-primary" style="margin-inline-start:auto" asp-action="ConvertToProcess" asp-route-id="@nextToConvertId">Next drawing →</a>
+    </div>
+}
+
+@await Html.PartialAsync("_RouteCard", Model)
+
+<script>
+    function printSheet(withDrawing) {
+        // Toggling this class right before printing lets the print CSS hide the
+        // drawing specifically for this print job — useful when the drawing is tall
+        // enough to spill onto a second page, so it can be left out to keep everything
+        // on one page instead.
+        document.documentElement.classList.toggle('print-no-drawing', !withDrawing);
+        window.print();
+    }
+    window.addEventListener('afterprint', function () {
+        document.documentElement.classList.remove('print-no-drawing');
+    });
+</script>

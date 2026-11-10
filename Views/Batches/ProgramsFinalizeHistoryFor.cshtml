@@ -1,0 +1,38 @@
+﻿@using TowerProcessSheet.Models
+@{
+    ViewData["Title"] = "Contract / Work Order history";
+    var batch = ViewBag.Batch as Batch;
+    var sample = ViewBag.Sample as ProcessSheet;
+    var history = ViewBag.History as List<ProgramsFinalizeHistory> ?? new();
+}
+<div class="page-head no-print">
+    <h1>Contract / Work Order history — @batch?.Name</h1>
+    <a class="btn" asp-action="Details" asp-route-id="@batch?.Id">Back to batch</a>
+</div>
+
+<table class="list-table">
+    <thead><tr><th>Contract Notification No.</th><th>Work Order No.</th><th>Active</th></tr></thead>
+    <tbody>
+        @if (sample != null)
+        {
+            <tr style="background:#f3faf3">
+                <td><strong>@(sample.ContractNotificationNo ?? "—")</strong></td>
+                <td><strong>@(sample.WorkOrderNo ?? "—")</strong></td>
+                <td><span class="chip chip-galv">Current — since @sample.ProgramsFinalizedAt?.ToString("yyyy-MM-dd")</span></td>
+            </tr>
+        }
+        @foreach (var h in history)
+        {
+            <tr>
+                <td>@(h.ContractNotificationNo ?? "—")</td>
+                <td>@(h.WorkOrderNo ?? "—")</td>
+                <td class="muted">@h.ActiveFrom.ToString("yyyy-MM-dd") → @h.ActiveTo?.ToString("yyyy-MM-dd")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if (history.Count == 0)
+{
+    <p class="muted" style="margin-top:12px">No changes have been made since this batch was first finalized — this is the only number it's ever had.</p>
+}

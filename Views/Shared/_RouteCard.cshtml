@@ -1,0 +1,303 @@
+@model ProcessSheet
+@using Microsoft.EntityFrameworkCore
+@inject TowerProcessSheet.Data.AppDbContext Db
+@{
+    var rows = OperationCatalog.Generate(Model);
+    bool hasDiagram = Model.DiagramImage != null && Model.DiagramImage.Length > 0;
+
+    var accepted = (Model.Reviews ?? new List<SheetReview>())
+        .Where(r => r.Decision == ReviewDecision.Accepted).ToList();
+
+    // Quality -> the big "Document Control" box at the bottom-right (once).
+    var qualityRev = accepted.Where(r => r.Slot == SignOffSlot.QualityInspector)
+        .OrderByDescending(r => r.ReviewedAt).FirstOrDefault();
+
+    // Planning signatures for the footer.
+    var compiledRev = accepted.Where(r => r.Slot == SignOffSlot.CompiledBy).OrderByDescending(r => r.ReviewedAt).FirstOrDefault();
+    var checkedRev = accepted.Where(r => r.Slot == SignOffSlot.CheckedBy).OrderByDescending(r => r.ReviewedAt).FirstOrDefault();
+    var approvedRev = accepted.Where(r => r.Slot == SignOffSlot.ApprovedBy).OrderByDescending(r => r.ReviewedAt).FirstOrDefault();
+
+    // An "operation" row (not inspection, not the W/W material/store lines).
+    bool IsOperation(GeneratedRow r) => !r.IsInspection && r.Setting != "W";
+
+    // A sheet converted from a Research drawing gets its four Planning signatures embedded
+    // directly in their table cells (Checked/Complied/Approved/Written By) — Checked by
+    // and Approved are always Eng. Eman Mahmoud, Complied by and Written By are whoever
+    // actually did the conversion. No position math needed: sitting inside the same cell
+    // as its label guarantees correct placement and size regardless of how tall the
+    // Steps table is.
+    string? checkedBySigSrc = null, compliedBySigSrc = null, approvedSigSrc = null, writtenBySigSrc = null;
+    if (Model.ConvertedToProcess)
+    {
+        var checkedUser = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == "eman.mahmoud");
+        var checkedImg = checkedUser?.SignatureImage;
+        if (checkedImg == null || checkedImg.Length == 0)
+        {
+            var gallerySig = checkedUser != null
+                ? await Db.UserSignatures.AsNoTracking().Where(s => s.UserId == checkedUser.Id).OrderByDescending(s => s.Id).FirstOrDefaultAsync()
+                : null;
+            checkedImg = gallerySig?.Image;
+        }
+        if (checkedImg != null && checkedImg.Length > 0)
+        {
+            checkedBySigSrc = "data:image/png;base64," + Convert.ToBase64String(checkedImg);
+            approvedSigSrc = checkedBySigSrc;   // same person, same image, second spot
+        }
+        if (Model.CompliedByUserId.HasValue)
+        {
+            var compliedUser = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == Model.CompliedByUserId.Value);
+            var compliedImg = compliedUser?.SignatureImage;
+            if (compliedImg == null || compliedImg.Length == 0)
+            {
+                var gallerySig = await Db.UserSignatures.AsNoTracking().Where(s => s.UserId == Model.CompliedByUserId.Value).OrderByDescending(s => s.Id).FirstOrDefaultAsync();
+                compliedImg = gallerySig?.Image;
+            }
+            if (compliedImg != null && compliedImg.Length > 0)
+            {
+                compliedBySigSrc = "data:image/png;base64," + Convert.ToBase64String(compliedImg);
+                writtenBySigSrc = compliedBySigSrc;   // same person, same image, second spot
+            }
+        }
+    }
+}
+
+<div class="route-card-outer">
+<div class="route-card-wrapper">
+    <table class="route-card">
+        @* 13 grid columns: 5 on the left (cost centre … unit), Description (wide) + a QTY-width column
+           (together = "Process Description"), Operator, a 2-part "Check for First Part", Accepted, Rejected, Inspector. *@
+        <colgroup>
+            <col style="width:7%" /><col style="width:6%" /><col style="width:5%" />
+            <col style="width:6%" /><col style="width:5%" />
+            <col style="width:22%" /><col style="width:6%" />
+            <col style="width:7.5%" />
+            <col style="width:6.25%" /><col style="width:6.25%" />
+            <col style="width:7.5%" /><col style="width:7.5%" /><col style="width:8%" />
+        </colgroup>
+
+        <thead>
+            <tr class="band">
+                <td colspan="5" class="hcell left">Contract No.@(string.IsNullOrWhiteSpace(Model.ContractNo) ? "" : "  " + Model.ContractNo)
+                    @if (!string.IsNullOrWhiteSpace(Model.ContractNotificationNo))
+                    {
+                        <span class="stamp-red-text">@Model.ContractNotificationNo</span>
+                    }
+                </td>
+                <td colspan="3" rowspan="2" class="hcell project">Project Name:. <span class="big">@Model.ProjectName</span></td>
+                <td colspan="5" rowspan="2" class="hcell wo-cell">Work Order No.:<br />
+                    @if (!string.IsNullOrWhiteSpace(Model.WorkOrderNo))
+                    {
+                        <span class="stamp-red-text">@Model.WorkOrderNo</span>
+                    }
+                </td>
+            </tr>
+            <tr class="band">
+                <td colspan="5" class="hcell left big2">Part No.:  @Model.PartNo</td>
+            </tr>
+            <tr class="band">
+                <td colspan="5" rowspan="2" class="hcell left big2">Drawing No.:  @Model.DrawingNo</td>
+                <td class="lbl">DESCRIPTION</td>
+                <td class="lbl">QTY</td>
+                <td class="lbl">Total QTY</td>
+                <td class="lbl" colspan="2">ASS'D ON</td>
+                <td class="lbl" colspan="3" rowspan="2">Quality Insp.
+                    @if (!string.IsNullOrWhiteSpace(Model.QualityInsp))
+                    {
+                        <br /><span class="qi-val">@Model.QualityInsp</span>
+                    }
+                </td>
+            </tr>
+            <tr class="band">
+                <td class="val big">@Model.Section</td>
+                <td class="val big">@Model.Qty</td>
+                <td class="val">@Model.TotalQty</td>
+                <td class="val" colspan="2">@Model.AssembledOn</td>
+            </tr>
+            <tr class="cols">
+                <td>Deliver To</td>
+                <td rowspan="2">Place<br />Of ST.</td>
+                <td colspan="2">TOTAL - QTY/Assy</td>
+                <td>UNIT</td>
+                <td rowspan="2" colspan="2">Process Description</td>
+                <td rowspan="2">Operator</td>
+                <td colspan="2">Check for First Part</td>
+                <td rowspan="2">Accepted Qty</td>
+                <td rowspan="2">Rejected Qty</td>
+                <td rowspan="2">Inspector</td>
+            </tr>
+            <tr class="cols">
+                <td>COST. CENT</td>
+                <td>Setting</td>
+                <td>TIME ALL'D</td>
+                <td>OP. NO</td>
+                <td colspan="2">Inspector</td>
+            </tr>
+        </thead>
+
+        <tbody>
+            @foreach (var r in rows)
+            {
+                <tr class="step@(r.IsInspection ? " insp" : "")">
+                    <td class="c">@r.CostCenter</td>
+                    <td class="c"></td>
+                    <td class="c">@r.Setting</td>
+                    <td class="c">@r.TimeAllowed</td>
+                    <td class="c">@r.OpNo</td>
+                    <td class="desc" colspan="2">@r.Description</td>
+                    <td class="stampcol"></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td class="stampcol"></td>
+                </tr>
+            }
+            <tr class="filler-row">
+                <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+            </tr>
+        </tbody>
+    </table>
+
+    @if (hasDiagram)
+    {
+        int scale = Model.DiagramScalePct <= 0 ? 100 : Model.DiagramScalePct;
+        <div class="diagram-embed">
+            <img style="width:@(scale)%;max-width:@(scale)%" src="data:@(Model.DiagramMime ?? "image/png");base64,@Convert.ToBase64String(Model.DiagramImage!)" alt="Drawing @Model.DrawingNo" />
+        </div>
+    }
+
+    @* Quality's "Document Control" mark is never auto-placed here either — like every
+       other stamp, it only appears where the user positions it themselves via "Place
+       stamp" (first sheet, applied to the whole batch). *@
+
+    @* ---- Footer: names only. Stamp graphics are never auto-placed here — the user
+         chooses every stamp's exact spot on the first sheet via "Place stamp", and that
+         same spot is applied to every sheet in the batch. ---- *@
+    @if (!string.IsNullOrWhiteSpace(Model.ProgramsIssue) || !string.IsNullOrWhiteSpace(Model.ProgramsDate))
+    {
+        <div class="doc-control-box">
+            <div class="dc-title">Document Control</div>
+            <div class="dc-sector">Production Sector</div>
+            <div class="dc-line"><span class="dc-lbl">Date : </span><span class="dc-val">@Model.ProgramsDate</span>
+                <span class="dc-lbl">&nbsp;&nbsp;Issue: </span><span class="dc-val">@Model.ProgramsIssue</span></div>
+        </div>
+    }
+    <table class="route-footer footer-full">
+        <tr>
+            <td class="sig-cell" colspan="2">
+                <span class="sig-label">Complied by :</span>
+                @if (compliedBySigSrc != null) { <img class="sig-inline-img" src="@compliedBySigSrc" alt="Complied by signature" /> }
+                else { <span class="sig-name">@(compiledRev?.ReviewerName ?? Model.CompiledBy)</span> }
+            </td>
+            <td>Sheet No.&nbsp; <b>@Model.SheetNo</b></td>
+            <td class="sig-cell">
+                <span class="sig-label">Checked :</span>
+                @if (checkedBySigSrc != null) { <img class="sig-inline-img" src="@checkedBySigSrc" alt="Checked by signature" /> }
+                else { <span class="sig-name">@(checkedRev?.ReviewerName ?? Model.CheckedBy)</span> }
+            </td>
+        </tr>
+        <tr>
+            <td>Date :&nbsp; <b>@(compiledRev != null ? compiledRev.ReviewedAt.ToString("d/M/yyyy") : Model.SheetDate)</b></td>
+            <td>No. of sheets&nbsp; <b>@Model.NoOfSheets</b></td>
+            <td class="sig-cell">
+                <span class="sig-label">Written By :</span>
+                @if (writtenBySigSrc != null) { <img class="sig-inline-img" src="@writtenBySigSrc" alt="Written By signature" /> }
+                else { <span class="sig-name">@Model.WrittenBy</span> }
+            </td>
+            <td class="sig-cell">
+                <span class="sig-label">Approved:</span>
+                @if (approvedSigSrc != null) { <img class="sig-inline-img" src="@approvedSigSrc" alt="Approved signature" /> }
+                else { <span class="sig-name">@(approvedRev?.ReviewerName ?? Model.Approved)</span> }
+            </td>
+        </tr>
+        <tr>
+            <td>Batch No.&nbsp; <b>@(Model.Batch?.Name)</b></td>
+            <td colspan="2">Process sheet Issue : <b>@Model.ProcessSheetIssue</b> &nbsp; Drawing Issue: <b>@Model.DrawingIssue</b></td>
+            <td class="docref">@Model.DocRef</td>
+        </tr>
+    </table>
+
+    @if (Model.Batch?.Placements != null)
+    {
+        // If this specific sheet has its own "reallocated" placement(s), show only
+        // those; otherwise fall back to the placements shared by the whole batch.
+        var sheetOverrides = Model.Batch.Placements.Where(p => p.ProcessSheetId == Model.Id).ToList();
+        var placementsToShow = sheetOverrides.Count > 0 ? sheetOverrides : Model.Batch.Placements.Where(p => p.ProcessSheetId == null);
+
+        // A Quality user's stamp is placed once for the whole batch, but sheets never
+        // actually move out of the coordinator's batch when "sent to Quality" — they
+        // just get marked who they were sent to. Without this check, that one placement
+        // would render on every sheet in the batch, including ones that were never sent
+        // to that Quality account at all (and so were never actually reviewed).
+        var qualityUserIds = await Db.Users.Where(u => u.Slot == SignOffSlot.QualityInspector).Select(u => u.Id).ToListAsync();
+        placementsToShow = placementsToShow.Where(p => !qualityUserIds.Contains(p.UserId) || p.UserId == Model.SentToQualityUserId).ToList();
+
+        // The "Fix stamp" tool renders this same placement itself, as a draggable
+        // overlay — showing it here too would look like two separate stamps stacked on
+        // top of each other. Hide just this one user's placement when that tool asks.
+        int? excludeUserId = ViewBag.ExcludeUserId as int?;
+        if (excludeUserId.HasValue) placementsToShow = placementsToShow.Where(p => p.UserId != excludeUserId.Value).ToList();
+
+        foreach (var p in placementsToShow)
+        {
+            if (p.Image != null && p.Image.Length > 0)
+            {
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                string xProp = p.AnchorRight ? "right" : "left";
+                string yProp = p.AnchorBottom ? "bottom" : "top";
+                string style = $"{xProp}:{(p.NormX * 100).ToString(ci)}%;{yProp}:{(p.NormY * 100).ToString(ci)}%;width:{p.WidthPct.ToString(ci)}%";
+                bool hasTextAnchor = !string.IsNullOrWhiteSpace(p.AnchorText);
+                <img class="placed-stamp" style="@style"
+                     data-anchor-text="@(hasTextAnchor ? p.AnchorText : null)"
+                     data-offset-x="@(p.OffsetXPx.ToString(ci))" data-offset-y="@(p.OffsetYPx.ToString(ci))"
+                     src="data:@(p.Mime ?? "image/png");base64,@Convert.ToBase64String(p.Image)" alt="stamp" />
+            }
+        }
+    }
+</div>
+</div>
+
+<script src="~/js/stamp-anchor.js" asp-append-version="true"></script>
+<script>
+(function () {
+    // Fixed heights can't work here — the table above the diagram is a different
+    // height on every sheet (depends on how many Steps it has), so there's no single
+    // number that fits all of them. Instead, right before the browser actually prints,
+    // measure how much space is genuinely left on the page and size the diagram to
+    // exactly that — guaranteeing everything fits on one page regardless of sheet length.
+    //
+    // Uses a fixed A4-printable-height reference (297mm page minus 6mm padding top and
+    // bottom = 285mm) rather than measuring .container's own height — on screen that
+    // container just scrolls and has no real fixed height, so measuring it gives a
+    // number far larger than an actual printed page.
+    var A4_PRINTABLE_MM = 285;
+    var MM_TO_PX = 96 / 25.4;
+
+    function sizeDiagramForPrint() {
+        var table = document.querySelector('.route-card');
+        var footer = document.querySelector('.route-footer');
+        if (!table) return;
+
+        var tableHeight = table.getBoundingClientRect().height;
+        var footerHeight = footer ? footer.getBoundingClientRect().height : 0;
+        var totalPx = A4_PRINTABLE_MM * MM_TO_PX;
+        // Safety buffer to absorb the difference between the table's on-screen font
+        // size and its smaller print font size, since this measurement may happen
+        // before the print stylesheet has fully applied.
+        var available = totalPx - tableHeight - footerHeight - 40;
+        document.documentElement.style.setProperty('--diagram-print-height', Math.max(available, 20) + 'px');
+    }
+
+    window.addEventListener('beforeprint', sizeDiagramForPrint);
+    if (window.matchMedia) {
+        var mq = window.matchMedia('print');
+        if (mq.addEventListener) {
+            mq.addEventListener('change', function (e) { if (e.matches) sizeDiagramForPrint(); });
+        }
+    }
+    window.addEventListener('afterprint', function () {
+        document.documentElement.style.removeProperty('--diagram-print-height');
+    });
+})();
+</script>

@@ -1,0 +1,15 @@
+@{
+    ViewData["Title"] = "New batch";
+}
+<div class="page-head no-print"><h1>New Batch</h1></div>
+
+<form class="card" asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div class="grid-2">
+        <div class="field"><label>Batch name / number</label><input class="input" name="name" placeholder="e.g. BATCH-0002" /></div>
+        <div class="field"><label>Project (optional)</label><input class="input" name="projectName" placeholder="e.g. S2  220 kv" /></div>
+    </div>
+    <p class="muted">The batch starts empty — you'll add its sheets next, using Import drawings (auto-detect).</p>
+    <button class="btn btn-primary" type="submit">Create batch</button>
+    <a class="btn" asp-action="Index">Cancel</a>
+</form>

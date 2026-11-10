@@ -1,0 +1,132 @@
+@using TowerProcessSheet.Controllers
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "For Review";
+    ViewData["FullWidth"] = true;
+    var groups = ViewBag.Groups as List<BatchesController.QualityDeliveryGroup> ?? new();
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">📋</div>
+        <div>
+            <h1>@T("qi_title")</h1>
+            <p>@T("qi_sub")</p>
+        </div>
+        <div class="mb-head-actions">
+            <div class="mb-stat-card" style="min-width:80px;padding:8px 16px">
+                <div class="mb-stat-num" style="font-size:20px">@groups.Count</div>
+                <div class="mb-stat-label">@(groups.Count == 1 ? T("qi_delivery") : T("qi_deliveries"))</div>
+            </div>
+        </div>
+    </div>
+
+    @if (groups.Count == 0)
+    {
+        <div class="mb-empty">@T("qi_empty")</div>
+    }
+    else
+    {
+        @foreach (var g in groups)
+        {
+            int reviewed = g.Sheets.Count(s => s.IsReviewedByMe);
+            int pct = g.Sheets.Count == 0 ? 0 : (int)(100.0 * reviewed / g.Sheets.Count);
+            <details class="mb-row" style="flex-direction:column;align-items:stretch;cursor:default" open>
+                <summary style="display:flex;align-items:center;gap:16px;width:100%;cursor:pointer;list-style:none">
+                    <div class="mb-row-icon">📦</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">
+                            @T("qi_batch_pre") "@g.BatchName"
+                            @if (!string.IsNullOrWhiteSpace(g.ProjectName))
+                            {
+                                <span class="mb-row-code">@T("qi_from_project") @g.ProjectName</span>
+                            }
+                        </div>
+                        <div class="progress-wrap" style="margin-top:6px;max-width:320px">
+                            <div class="progress-bar"><span style="width:@(pct)%"></span></div>
+                            <div class="progress-label">@reviewed / @g.Sheets.Count @T("bd_reviewed")</div>
+                        </div>
+                    </div>
+                    @if (g.BatchId.HasValue)
+                    {
+                        <div class="mb-row-actions">
+                            <a class="btn btn-sm btn-primary" asp-action="PlaceStamps" asp-route-id="@g.BatchId">@T("ix_place_stamp")</a>
+                        </div>
+                    }
+                </summary>
+
+                @if (g.BatchId.HasValue)
+                {
+                    <div class="dl-choice-grid" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
+                        @if (g.PartListProjectId.HasValue)
+                        {
+                            <a class="dl-choice-card" asp-action="PartList" asp-route-projectId="@g.PartListProjectId" target="_blank">
+                                <div class="dl-choice-icon">📎</div>
+                                <div class="dl-choice-title">@T("pl_open_ref")</div>
+                                <div class="dl-choice-sub">@T("pl_open_ref_sub")</div>
+                            </a>
+                            <a class="dl-choice-card" asp-action="PartListStatus" asp-route-projectId="@g.PartListProjectId" target="_blank">
+                                <div class="dl-choice-icon">☑</div>
+                                <div class="dl-choice-title">@T("plc_link")</div>
+                                <div class="dl-choice-sub">@T("plc_card_sub")</div>
+                            </a>
+                        }
+                        <a class="dl-choice-card" asp-action="DownloadDrawings" asp-route-id="@g.BatchId" asp-route-mode="single" asp-route-onlySentToMe="true">
+                            <div class="dl-choice-icon">📐</div>
+                            <div class="dl-choice-title">@T("qi_drawings_one")</div>
+                            <div class="dl-choice-sub">@T("qi_drawings_one_sub")</div>
+                        </a>
+                        <a class="dl-choice-card" asp-action="DownloadDrawings" asp-route-id="@g.BatchId" asp-route-mode="zip" asp-route-onlySentToMe="true">
+                            <div class="dl-choice-icon">🗂</div>
+                            <div class="dl-choice-title">@T("qi_drawings_zip")</div>
+                            <div class="dl-choice-sub">@T("qi_drawings_zip_sub")</div>
+                        </a>
+                        @if (g.Sheets.Any(s => s.ConvertedToProcess))
+                        {
+                            <a class="dl-choice-card" asp-action="DownloadProcessSheets" asp-route-id="@g.BatchId" asp-route-mode="single" asp-route-onlySentToMe="true">
+                                <div class="dl-choice-icon">📋</div>
+                                <div class="dl-choice-title">@T("qi_process_one")</div>
+                                <div class="dl-choice-sub">@T("qi_process_one_sub")</div>
+                            </a>
+                            <a class="dl-choice-card" asp-action="DownloadProcessSheets" asp-route-id="@g.BatchId" asp-route-mode="zip" asp-route-onlySentToMe="true">
+                                <div class="dl-choice-icon">🗂</div>
+                                <div class="dl-choice-title">@T("qi_process_zip")</div>
+                                <div class="dl-choice-sub">@T("qi_process_zip_sub")</div>
+                            </a>
+                        }
+                    </div>
+                }
+
+                <div class="sent-thumb-grid" style="margin-top:12px">
+                    @foreach (var s in g.Sheets)
+                    {
+                        <div class="sent-thumb sent-thumb-noimg">
+                            <div class="sent-thumb-preview">
+                                <iframe src="@Url.Action("Preview", "ProcessSheets", new { id = s.Id, t = DateTime.Now.Ticks })" scrolling="no" title="Preview"></iframe>
+                                <span class="sent-thumb-badge">@(s.WasResent ? "🔄" : s.IsRejectedByMe ? "❌" : s.IsReviewedByMe ? "✅" : "📐")</span>
+                            </div>
+                            <div class="sent-thumb-label">@s.PartNo <span>@s.Section</span></div>
+                            @if (s.WasResent)
+                            {
+                                <div class="chip chip-galv" style="width:100%;justify-content:center;margin-bottom:4px">@T("qi_resent")</div>
+                            }
+                            else if (s.IsRejectedByMe)
+                            {
+                                <div class="chip chip-rej" style="width:100%;justify-content:center;margin-bottom:4px">@T("bd_rejected")</div>
+                            }
+                            <a class="btn btn-sm" style="width:100%;justify-content:center" asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@s.Id">@(s.ConvertedToProcess ? T("ix_view_process") : T("ix_view"))</a>
+                            @if (s.ConvertedToProcess)
+                            {
+                                <a class="btn btn-sm btn-primary" style="width:100%;justify-content:center;margin-top:4px" asp-action="PerSheetFixStamp" asp-route-sheetId="@s.Id">@(s.IsReviewedByMe ? T("qi_review_again") : T("bd_review_btn"))</a>
+                            }
+                        </div>
+                    }
+                </div>
+            </details>
+        }
+    }
+</div>
+
+<style>
+    details.mb-row summary::-webkit-details-marker { display: none; }
+</style>

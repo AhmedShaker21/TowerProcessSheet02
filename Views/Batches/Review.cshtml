@@ -1,0 +1,171 @@
+@model TowerProcessSheet.Models.ProcessSheet
+@{
+    ViewData["Title"] = $"Review {Model.DrawingNo}";
+    var batch = ViewBag.Batch as TowerProcessSheet.Models.Batch;
+    int pos = ViewBag.Pos; int count = ViewBag.Count; int done = ViewBag.ReviewedByMe;
+    var mine = ViewBag.MyReview as TowerProcessSheet.Models.SheetReview;
+    int pct = count == 0 ? 0 : (int)(100.0 * done / count);
+}
+
+<div class="review-toolbar no-print">
+    <div class="review-id">
+        <span class="eyebrow">Reviewing · @batch?.Name</span>
+        <h1>Sheet @(pos + 1) <span class="muted">of @count</span> — <span class="mono">@Model.DrawingNo</span></h1>
+        <div class="progress-wrap">
+            <div class="progress-bar"><span style="width:@(pct)%"></span></div>
+            <div class="progress-label">@done / @count reviewed</div>
+        </div>
+    </div>
+    <div class="head-actions">
+        <a class="btn @(pos <= 0 ? "disabled" : "")" asp-action="Review" asp-route-id="@batch!.Id" asp-route-pos="@(pos-1)">‹ Prev</a>
+        <a class="btn @(pos >= count-1 ? "disabled" : "")" asp-action="Review" asp-route-id="@batch.Id" asp-route-pos="@(pos+1)">Next ›</a>
+        <a class="btn" asp-action="Details" asp-route-id="@batch.Id">Batch</a>
+    </div>
+</div>
+
+@if (mine != null)
+{
+    <div class="flash @(mine.Decision == TowerProcessSheet.Models.ReviewDecision.Accepted ? "flash-ok" : "flash-err")">
+        You already @(mine.Decision == TowerProcessSheet.Models.ReviewDecision.Accepted ? "accepted" : "rejected") this sheet@(string.IsNullOrWhiteSpace(mine.Comment) ? "" : $": {mine.Comment}"). Submitting again will update it.
+    </div>
+}
+
+<div class="annotate-toolbar no-print">
+    <button type="button" id="drawToggle" class="btn btn-sm">Mark-up: OFF</button>
+    <button type="button" id="drawClear" class="btn btn-sm">Clear</button>
+    <span class="muted">Turn on and circle what's wrong (e.g. the part no), then press Reject. The mark-up is feedback only — the sheet stays clean.</span>
+</div>
+
+<div class="review-split">
+    <div class="review-pane review-pane-sheet">
+        <div class="review-pane-title">Process Sheet</div>
+        <div class="annotate-wrap" id="annotateWrap">
+            @await Html.PartialAsync("_RouteCard", Model)
+            <canvas id="annCanvas" class="annotate-canvas"></canvas>
+        </div>
+    </div>
+    <div class="review-pane review-pane-drawing">
+        <div class="review-pane-title-row">
+            <div class="review-pane-title">Drawing</div>
+            @{
+                bool hasAnyDrawing = (Model.FullDrawingImage != null && Model.FullDrawingImage.Length > 0)
+                    || (Model.DiagramImage != null && Model.DiagramImage.Length > 0);
+            }
+            @if (hasAnyDrawing)
+            {
+                <a class="btn btn-sm btn-primary" asp-controller="ProcessSheets" asp-action="FullDrawing" asp-route-id="@Model.Id" target="_blank">⤢ Open full window</a>
+            }
+        </div>
+        @if (Model.FullDrawingImage != null && Model.FullDrawingImage.Length > 0)
+        {
+            <div class="drawing-zoom-wrap">
+                <img class="drawing-zoom-img" id="drawingZoomImg"
+                     src="@Url.Action("FullDrawingImage", "ProcessSheets", new { id = Model.Id })"
+                     alt="Drawing @Model.DrawingNo" />
+            </div>
+            <div class="drawing-zoom-controls no-print">
+                <label>Zoom <input type="range" id="drawingZoomRange" min="50" max="300" value="100" step="10" /></label>
+                <span class="muted">Full page — includes the title block and tables.</span>
+            </div>
+        }
+        else if (Model.DiagramImage != null && Model.DiagramImage.Length > 0)
+        {
+            <div class="drawing-zoom-wrap">
+                <img class="drawing-zoom-img" id="drawingZoomImg"
+                     src="data:@(Model.DiagramMime ?? "image/png");base64,@Convert.ToBase64String(Model.DiagramImage)"
+                     alt="Drawing @Model.DrawingNo" />
+            </div>
+            <div class="drawing-zoom-controls no-print">
+                <label>Zoom <input type="range" id="drawingZoomRange" min="50" max="300" value="100" step="10" /></label>
+            </div>
+        }
+        else
+        {
+            <div class="empty">No drawing image attached to this sheet.</div>
+        }
+    </div>
+</div>
+
+<form class="review-bar no-print" asp-action="Decide" asp-route-id="@batch!.Id" method="post" id="reviewForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="sheetId" value="@Model.Id" />
+    <input type="hidden" name="pos" value="@pos" />
+    <input type="hidden" name="annotation" id="annotationInput" />
+    <textarea class="input reject-reason" name="comment" placeholder="Reason for rejection (required to reject)">@mine?.Comment</textarea>
+    <div class="review-actions">
+        <button class="btn btn-danger" type="submit" name="decision" value="Rejected">Reject</button>
+        <button class="btn btn-primary btn-lg" type="submit" name="decision" value="Accepted">Accept &amp; stamp ›</button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+(function () {
+  var wrap = document.getElementById('annotateWrap');
+  var canvas = document.getElementById('annCanvas');
+  var toggle = document.getElementById('drawToggle');
+  var clearBtn = document.getElementById('drawClear');
+  var annInput = document.getElementById('annotationInput');
+  var ctx = canvas.getContext('2d');
+  var drawing = false, active = false, hasDrawing = false, last = null;
+
+  function sizeCanvas() {
+    // Preserve any existing drawing while resizing.
+    var prev = hasDrawing ? canvas.toDataURL() : null;
+    canvas.width = wrap.scrollWidth;
+    canvas.height = wrap.scrollHeight;
+    ctx.strokeStyle = '#e11';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (prev) { var img = new Image(); img.onload = function(){ ctx.drawImage(img,0,0); }; img.src = prev; }
+  }
+  setTimeout(sizeCanvas, 60);
+  window.addEventListener('resize', sizeCanvas);
+
+  var zoomImg = document.getElementById('drawingZoomImg');
+  var zoomRange = document.getElementById('drawingZoomRange');
+  if (zoomImg && zoomRange) {
+    zoomRange.addEventListener('input', function () {
+      zoomImg.style.width = zoomRange.value + '%';
+    });
+  }
+
+  toggle.addEventListener('click', function () {
+    active = !active;
+    toggle.textContent = 'Mark-up: ' + (active ? 'ON' : 'OFF');
+    toggle.classList.toggle('btn-primary', active);
+    canvas.style.pointerEvents = active ? 'auto' : 'none';
+    canvas.style.cursor = active ? 'crosshair' : 'default';
+  });
+  clearBtn.addEventListener('click', function () {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasDrawing = false; annInput.value = '';
+  });
+
+  function pos(e) {
+    var r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  canvas.addEventListener('pointerdown', function (e) { if (!active) return; drawing = true; last = pos(e); });
+  canvas.addEventListener('pointermove', function (e) {
+    if (!active || !drawing) return;
+    var p = pos(e);
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last = p; hasDrawing = true;
+  });
+  window.addEventListener('pointerup', function () { drawing = false; });
+
+  document.getElementById('reviewForm').addEventListener('submit', function (e) {
+    var btn = e.submitter;
+    if (btn && btn.value === 'Rejected') {
+      var c = this.querySelector('.reject-reason');
+      if (!c.value.trim()) { e.preventDefault(); c.focus(); c.classList.add('input-error'); alert('Please enter a reason to reject.'); return; }
+      if (hasDrawing) annInput.value = canvas.toDataURL('image/png');
+    } else {
+      annInput.value = ''; // accepting clears any drawing
+    }
+  });
+})();
+</script>
+}
