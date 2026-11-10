@@ -1,0 +1,41 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    ViewData["Title"] = "Import from PDFs";
+    var recipients = ViewBag.Recipients as List<SelectListItem> ?? new();
+}
+<div class="page-head no-print"><h1>Import sheets from drawing PDFs</h1>
+    <div class="head-actions"><a class="btn" asp-action="ImportCsv">Import a list instead</a></div>
+</div>
+
+<div class="card">
+    <p class="muted">Select many drawing PDFs at once. Each drawing's title block is read to fill Part/Drawing/Section/Qty/Material, and one batch is created. Drawings with an unreadable title block are counted and skipped.</p>
+    <p class="muted">Because a PDF doesn't say which operations to run, pick a default operation set applied to every sheet (you can adjust individual sheets afterwards).</p>
+</div>
+
+<form class="card" asp-action="ImportPdf" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <div class="field"><label>Drawing PDFs (select multiple)</label><input class="input file-input" type="file" name="files" accept="application/pdf" multiple /></div>
+    <div class="grid-2">
+        <div class="field"><label>Batch name</label><input class="input" name="batchName" placeholder="e.g. BATCH-0003" /></div>
+        <div class="field"><label>Project (fallback)</label><input class="input" name="projectName" /></div>
+    </div>
+    <div class="field">
+        <label>Default operations for every sheet</label>
+        <select class="input" name="operations">
+            <option value="CUT_DRILL">Cutting &amp; Drilling</option>
+            <option value="CUT_DRILL;CUTTING">Cutting &amp; Drilling → Cutting</option>
+            <option value="CUT_DRILL;CUTTING;MILLING">Cutting &amp; Drilling → Cutting → Milling</option>
+        </select>
+    </div>
+    <div class="grid-2">
+        <div class="field">
+            <label>Send to first reviewer now (optional)</label>
+            <select class="input" name="sendTo">
+                <option value="">— Keep as draft —</option>
+                @foreach (var r in recipients) { <option value="@r.Value">@r.Text</option> }
+            </select>
+        </div>
+        <div class="field"><label>Note (optional)</label><input class="input" name="note" /></div>
+    </div>
+    <button class="btn btn-primary btn-lg" type="submit">Read PDFs &amp; create batch</button>
+</form>

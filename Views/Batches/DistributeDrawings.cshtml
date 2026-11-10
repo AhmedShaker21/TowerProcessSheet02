@@ -1,0 +1,125 @@
+@using TowerProcessSheet.Models
+@{
+    ViewData["Title"] = "Distribute drawings";
+    var planners = ViewBag.Planners as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new();
+    var saved = ViewBag.Saved as SavedCalibration;
+}
+<div class="page-head no-print">
+    <h1>Distribute drawings</h1>
+    <a class="btn" asp-action="Index">Cancel</a>
+</div>
+
+@if (saved != null)
+{
+    <div class="flash flash-ok">✓ Using your saved drawing layout (last set @saved.UpdatedAt.ToString("yyyy-MM-dd HH:mm")) — every drawing is read automatically.</div>
+}
+else
+{
+    <div class="flash flash-err">No saved layout yet — go to any batch and use "Import drawings" once first, so the system knows where each field sits. This is a one-time setup — it's kept safe even if the database is ever reset.</div>
+}
+
+<div class="hint">
+    Upload everything at once — either <b>one PDF containing every drawing</b> (each page becomes one drawing),
+    or <b>several separate PDF files</b>. Then say how many go to each planner, in order — a new batch is created
+    for each of them automatically, already filled in.
+</div>
+
+<form class="card" asp-action="DistributeDrawings" method="post" enctype="multipart/form-data" id="distForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="mode" id="modeInput" value="separate" />
+    <input type="hidden" name="sharesJson" id="sharesJson" />
+
+    <div class="type-cards" style="margin-bottom:16px">
+        <div class="type-card selected" data-mode="separate">
+            <div class="tc-check">✓</div>
+            <div class="tc-title">Separate PDF files</div>
+            <div class="tc-sub">Each drawing is its own PDF — select them all at once.</div>
+        </div>
+        <div class="type-card" data-mode="onepdf">
+            <div class="tc-check"></div>
+            <div class="tc-title">One PDF, many pages</div>
+            <div class="tc-sub">A single PDF containing every drawing — each page is treated as one drawing.</div>
+        </div>
+    </div>
+
+    <div class="field"><label>Drawing PDFs</label>
+        <input class="input" type="file" name="pdfs" id="pdfsInput" accept="application/pdf" multiple required />
+    </div>
+    <div class="field"><label>Project (optional, applied to every new batch)</label>
+        <input class="input" name="projectName" placeholder="e.g. S2 220 kv" /></div>
+
+    <h3 class="section-h">Split between planners</h3>
+    <div id="sharesBody" class="ops-list"></div>
+    <button type="button" class="btn" id="addShare">+ Add planner</button>
+    <div class="hint" style="margin-top:10px">Total requested: <b id="totalCount">0</b></div>
+
+    <div class="step-actions" style="margin-top:16px">
+        <button class="btn btn-primary btn-lg" type="submit" id="submitBtn" @(saved == null ? "disabled" : "")>
+            @(saved == null ? "⛔ Split & distribute — set up a layout first" : "Split & distribute")
+        </button>
+        @if (saved == null)
+        {
+            <span class="muted" style="margin-inline-start:10px">Greyed out because no layout is saved yet — see the message above.</span>
+        }
+    </div>
+</form>
+
+@section Scripts {
+<script>
+(function () {
+  var modeInput = document.getElementById('modeInput');
+  var pdfsInput = document.getElementById('pdfsInput');
+  document.querySelectorAll('.type-card').forEach(function (c) {
+    c.addEventListener('click', function () {
+      document.querySelectorAll('.type-card').forEach(function (x) { x.classList.remove('selected'); x.querySelector('.tc-check').textContent = ''; });
+      c.classList.add('selected'); c.querySelector('.tc-check').textContent = '✓';
+      modeInput.value = c.dataset.mode;
+      if (c.dataset.mode === 'onepdf') pdfsInput.removeAttribute('multiple'); else pdfsInput.setAttribute('multiple', 'multiple');
+    });
+  });
+
+  var planners = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(planners.Select(p => new { value = p.Value, text = p.Text })));
+  var sharesBody = document.getElementById('sharesBody');
+  var totalCount = document.getElementById('totalCount');
+
+  function renumber() {
+    var total = 0;
+    sharesBody.querySelectorAll('.op-row').forEach(function (row) {
+      total += parseInt(row.querySelector('.share-count').value, 10) || 0;
+    });
+    totalCount.textContent = total;
+  }
+
+  function addShare() {
+    var row = document.createElement('div');
+    row.className = 'op-row';
+    var sel = document.createElement('select');
+    sel.className = 'input share-planner';
+    planners.forEach(function (p) {
+      var o = document.createElement('option'); o.value = p.value; o.textContent = p.text; sel.appendChild(o);
+    });
+    var count = document.createElement('input');
+    count.type = 'number'; count.className = 'input share-count'; count.min = '1'; count.placeholder = 'Count'; count.style.width = '110px';
+    count.addEventListener('input', renumber);
+    var rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'btn-icon btn-remove'; rm.textContent = '×';
+    rm.addEventListener('click', function () { row.remove(); renumber(); });
+    row.appendChild(sel); row.appendChild(count); row.appendChild(rm);
+    sharesBody.appendChild(row);
+  }
+  document.getElementById('addShare').addEventListener('click', addShare);
+  addShare(); addShare();   // start with two rows — matches the common "split between two people" case
+
+  document.getElementById('distForm').addEventListener('submit', function (e) {
+    var shares = [];
+    sharesBody.querySelectorAll('.op-row').forEach(function (row) {
+      var uid = parseInt(row.querySelector('.share-planner').value, 10);
+      var count = parseInt(row.querySelector('.share-count').value, 10) || 0;
+      if (uid && count > 0) shares.push({ toUserId: uid, count: count });
+    });
+    if (shares.length === 0) { e.preventDefault(); alert('Enter at least one planner and a count.'); return; }
+    document.getElementById('sharesJson').value = JSON.stringify(shares);
+  });
+})();
+</script>
+}

@@ -1,0 +1,73 @@
+@{
+    Layout = null;
+    var lang = Tr.Lang(Context);
+    var rtl = Tr.Rtl(Context);
+    string T(string k) => Tr.S(Context, k);
+    string other = lang == "en" ? "ar" : "en";
+}
+<!DOCTYPE html>
+<html lang="@lang" dir="@(rtl ? "rtl" : "ltr")">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@T("login_title") · @T("sysname")</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="login-bg-pro">
+    <div class="login-sky" aria-hidden="true">
+        <div class="login-cloud c1"></div>
+        <div class="login-cloud c2"></div>
+        <div class="login-cloud c3"></div>
+        <div class="login-cloud c4"></div>
+    </div>
+    <div class="login-plane far" aria-hidden="true"><div class="login-plane-bob"><img src="~/img/aoi-k8e.png" alt="" /></div></div>
+    <div class="login-plane" aria-hidden="true"><div class="login-plane-bob"><img src="~/img/aoi-k8e.png" alt="" /></div></div>
+    <a class="lang-float-clean" href="@Url.Action("SetLang", "Account", new { lang = other, returnUrl = "/Account/Login" })">@(lang == "en" ? "عربي" : "EN")</a>
+
+    <div class="login-center">
+        <div class="login-card-pro">
+            <div class="login-mark-pro">
+                @{
+                    string logoPath = System.IO.Path.Combine(System.AppContext.BaseDirectory, "wwwroot", "images", "aoi-logo.png");
+                    bool hasLogo = System.IO.File.Exists(logoPath);
+                }
+                @if (hasLogo)
+                {
+                    <img class="login-mark-logo-pro" src="~/images/aoi-logo.png" asp-append-version="true" alt="@T("org")" />
+                }
+                else
+                {
+                    <span class="login-mark-badge-pro">AOI</span>
+                }
+            </div>
+            <div class="login-org-pro"><b>@T("org")</b><span>@T("factory")</span></div>
+            <h1 class="login-headline-pro">@T("sysname")</h1>
+
+            <div class="login-card-head-pro">
+                <h2>@T("login_title")</h2>
+                <p>@T("secure")</p>
+            </div>
+
+            @if (ViewBag.Error != null)
+            {
+                <div class="flash flash-err">@T("wrong_login")</div>
+            }
+            <form asp-controller="Account" asp-action="Login" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+                <div class="field-pro">
+                    <label>@T("username")</label>
+                    <input class="input-pro" name="username" placeholder="@T("username")" autofocus />
+                </div>
+                <div class="field-pro">
+                    <label>@T("password")</label>
+                    <input class="input-pro" type="password" name="password" placeholder="@T("password")" />
+                </div>
+                <label class="chk login-remember-pro"><input type="checkbox" checked /> @T("remember")</label>
+                <button class="btn btn-primary btn-block-pro" type="submit">@T("login_title")</button>
+            </form>
+        </div>
+        <div class="login-foot-pro">@T("version") 1.0.0 · © @T("org") - @T("factory")</div>
+    </div>
+</body>
+</html>

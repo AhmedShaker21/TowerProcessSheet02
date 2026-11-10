@@ -1,0 +1,100 @@
+@model ProcessSheet
+@{
+    ViewData["Title"] = "Review the drawing";
+    ViewData["FullWidth"] = true;
+    string drawingSrc = ViewBag.DrawingSrc;
+    double normX = ViewBag.NormX, normY = ViewBag.NormY, normW = ViewBag.NormW, normH = ViewBag.NormH;
+    bool hasFull = (Model.FullDrawingImage != null && Model.FullDrawingImage.Length > 0) || (Model.StampedDrawingImage != null && Model.StampedDrawingImage.Length > 0);
+}
+<div class="page-head no-print">
+    <h1>Review the drawing — @Model.DrawingNo</h1>
+    @if (hasFull)
+    {
+        <a class="btn" asp-action="FullDrawing" asp-route-id="@Model.Id" target="_blank">⤢ View full drawing</a>
+    }
+</div>
+
+<div class="flash flash-ok">
+    Fields were read automatically. Drag the box to cover the part of the drawing that should show on the process
+    sheet, and drag its corner to resize width and height independently — then continue to the Steps.
+</div>
+
+<form asp-action="ConvertPreviewDiagram" method="post" id="cropForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="id" value="@Model.Id" />
+    <input type="hidden" name="normX" id="normX" value="@normX" />
+    <input type="hidden" name="normY" id="normY" value="@normY" />
+    <input type="hidden" name="normW" id="normW" value="@normW" />
+    <input type="hidden" name="normH" id="normH" value="@normH" />
+    <div class="step-actions" style="margin-bottom:14px">
+        <button class="btn btn-primary btn-lg" type="submit">Continue to Steps →</button>
+    </div>
+</form>
+
+<div class="annotate-wrap" id="cropWrap" style="position:relative;display:inline-block;max-width:100%">
+    <img src="@drawingSrc" alt="drawing" style="display:block;max-width:100%;height:auto;box-shadow:0 8px 24px rgba(0,0,0,.15)" />
+    <div class="place-item place-item-active" id="cropBox"
+         style="left:@(normX * 100)%; top:@(normY * 100)%; width:@(normW * 100)%; height:@(normH * 100)%;">
+        <span class="resize-handle" title="Drag to resize width and height"></span>
+    </div>
+</div>
+
+<style>
+    #cropBox { position: absolute; border: 2px solid var(--brand); background: rgba(47,111,237,.12); cursor: move; }
+</style>
+
+@section Scripts {
+<script>
+(function () {
+  var wrap = document.getElementById('cropWrap');
+  var box = document.getElementById('cropBox');
+  var normXI = document.getElementById('normX'), normYI = document.getElementById('normY');
+  var normWI = document.getElementById('normW'), normHI = document.getElementById('normH');
+
+  function applyStyle() {
+    box.style.left = (parseFloat(normXI.value) * 100) + '%';
+    box.style.top = (parseFloat(normYI.value) * 100) + '%';
+    box.style.width = (parseFloat(normWI.value) * 100) + '%';
+    box.style.height = (parseFloat(normHI.value) * 100) + '%';
+  }
+
+  var dragging = false, dragStartX = 0, dragStartY = 0, startNormX = 0, startNormY = 0;
+  box.addEventListener('pointerdown', function (e) {
+    if (e.target.classList.contains('resize-handle')) return;
+    dragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+    startNormX = parseFloat(normXI.value); startNormY = parseFloat(normYI.value);
+    box.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  box.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    var r = wrap.getBoundingClientRect();
+    var dx = (e.clientX - dragStartX) / r.width;
+    var dy = (e.clientY - dragStartY) / r.height;
+    var w = parseFloat(normWI.value), h = parseFloat(normHI.value);
+    normXI.value = Math.min(Math.max(startNormX + dx, 0), 1 - w).toFixed(3);
+    normYI.value = Math.min(Math.max(startNormY + dy, 0), 1 - h).toFixed(3);
+    applyStyle();
+  });
+  box.addEventListener('pointerup', function () { dragging = false; });
+
+  var handle = box.querySelector('.resize-handle');
+  var resizing = false, startX = 0, startY = 0, startW = 0, startH = 0;
+  handle.addEventListener('pointerdown', function (e) {
+    resizing = true; startX = e.clientX; startY = e.clientY;
+    startW = parseFloat(normWI.value); startH = parseFloat(normHI.value);
+    handle.setPointerCapture(e.pointerId); e.stopPropagation(); e.preventDefault();
+  });
+  handle.addEventListener('pointermove', function (e) {
+    if (!resizing) return;
+    var r = wrap.getBoundingClientRect();
+    var dw = (e.clientX - startX) / r.width;
+    var dh = (e.clientY - startY) / r.height;
+    var x = parseFloat(normXI.value), y = parseFloat(normYI.value);
+    normWI.value = Math.min(Math.max(startW + dw, 0.03), 1 - x).toFixed(3);
+    normHI.value = Math.min(Math.max(startH + dh, 0.03), 1 - y).toFixed(3);
+    applyStyle();
+  });
+  handle.addEventListener('pointerup', function (e) { resizing = false; e.stopPropagation(); });
+})();
+</script>
+}

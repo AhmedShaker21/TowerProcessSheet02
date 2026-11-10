@@ -1,0 +1,55 @@
+@model TowerProcessSheet.Controllers.BatchesController.CalManifest
+@{
+    ViewData["Title"] = "Import results";
+    string token = ViewBag.Token;
+    int batchId = ViewBag.BatchId;
+    bool hasZip = ViewBag.HasZip;
+}
+<div class="page-head no-print">
+    <h1>Import results</h1>
+    <a class="btn" asp-action="Details" asp-route-id="@batchId">Back to batch</a>
+</div>
+
+<div class="flash flash-ok">Created <b>@Model.Created</b> sheet(s) from the calibrated drawings.</div>
+
+@if (hasZip)
+{
+    <div class="card">
+        <p>The original PDFs were renamed to match their extracted @(string.IsNullOrEmpty(Model.NameField) ? "" : "value") and are ready to download.</p>
+        <a class="btn btn-primary" asp-action="DownloadRenamed" asp-route-token="@token">Download renamed PDFs (ZIP)</a>
+    </div>
+}
+
+@if (Model.Failed.Count > 0)
+{
+    <h2 class="section-h">Needs a manual box (@Model.Failed.Count)</h2>
+    <div class="hint">The naming spot came back blank on these drawings — mark it yourself for each one and it'll be added to the batch.</div>
+    <table class="list-table">
+        <thead><tr><th>File</th><th class="actions-col"></th></tr></thead>
+        <tbody>
+        @foreach (var f in Model.Failed)
+        {
+            <tr>
+                <td class="mono">@f</td>
+                <td class="actions-col"><a class="btn btn-sm btn-primary" asp-action="RetryOne" asp-route-token="@token" asp-route-batchId="@batchId" asp-route-file="@f">Mark this file</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <form asp-action="FinishCalibration" method="post" class="inline-form" style="margin-top:14px">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="token" value="@token" />
+        <input type="hidden" name="batchId" value="@batchId" />
+        <button class="btn btn-danger" type="submit">Finish now — skip the remaining @Model.Failed.Count</button>
+    </form>
+}
+else
+{
+    <form asp-action="FinishCalibration" method="post" class="inline-form">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="token" value="@token" />
+        <input type="hidden" name="batchId" value="@batchId" />
+        <button class="btn btn-primary btn-lg" type="submit">Done — back to batch</button>
+    </form>
+}

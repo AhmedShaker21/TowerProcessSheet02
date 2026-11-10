@@ -1,0 +1,478 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using TowerProcessSheet.Models
+@using TowerProcessSheet.Services
+@model TowerProcessSheet.Models.Batch
+@{
+    ViewData["FullWidth"] = true;
+    ViewData["Title"] = $"Batch {Model.Name}";
+    int total = ViewBag.Total; int done = ViewBag.ReviewedByMe;
+    bool hasResearchSheets = ViewBag.HasResearchSheets ?? false;
+    int page = ViewBag.Page; int pages = ViewBag.Pages;
+    var sheets = ViewBag.Sheets as List<TowerProcessSheet.Models.BatchSheetRow> ?? new();
+    var myReviews = ViewBag.MyReviews as Dictionary<int, TowerProcessSheet.Models.ReviewDecision> ?? new();
+    bool isHolder = ViewBag.IsHolder ?? false;
+    bool isCreator = ViewBag.IsCreator ?? false;
+    var recipients = ViewBag.Recipients as List<SelectListItem> ?? new();
+    var planners = ViewBag.Planners as List<SelectListItem> ?? new();
+    int pct = total == 0 ? 0 : (int)(100.0 * done / total);
+    bool isDraft = Model.Status == TowerProcessSheet.Models.BatchStatus.Draft;
+    bool isCoordinator = ViewBag.IsCoordinator ?? false;
+    bool isQualityInspector = ViewBag.IsQualityInspector ?? false;
+    bool isPlanningDept = ViewBag.IsPlanningDept ?? false;
+    bool isProgramsOps = ViewBag.IsProgramsOps ?? false;
+    int completedCount = ViewBag.CompletedCount ?? 0;
+    int sentToMeCount = ViewBag.SentToMeCount ?? 0;
+    int acceptedOfMine = ViewBag.AcceptedOfMine ?? 0;
+    bool allConverted = ViewBag.AllConverted ?? false;
+    string T(string k) => Tr.S(Context, k);
+}
+
+@if (isCoordinator)
+{
+    <div class="flash flash-ok no-print" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span>@T("bd_currently_with") <b>@(Model.CurrentHolder?.FullName ?? Model.CreatedBy?.FullName ?? "—")</b>.</span>
+        <form asp-action="Reassign" asp-route-id="@Model.Id" method="post" class="inline-form" style="display:flex;gap:8px;align-items:center">
+            @Html.AntiForgeryToken()
+            <label>
+                @T("bd_assign_whole")
+                <select class="input" name="toUserId" asp-items="planners" style="min-width:180px"></select>
+            </label>
+            <button class="btn btn-sm btn-primary" type="submit">@T("bd_assign_btn")</button>
+        </form>
+        @if (total > 0)
+        {
+            <a class="btn btn-sm" style="margin-inline-start:auto" asp-action="SplitAssign" asp-route-id="@Model.Id">@T("bd_split_by_count")</a>
+        }
+        @if (completedCount > 0)
+        {
+            <a class="btn btn-sm btn-primary" asp-action="SendCompletedToQuality" asp-route-batchId="@Model.Id">@T("bd_send_completed") (@completedCount) @T("bd_to_quality")</a>
+        }
+    </div>
+    <div class="flash flash-ok no-print" style="display:flex;align-items:center;gap:10px;margin-top:10px">
+        @{
+            var myProjects = ViewBag.MyProjects as List<TowerProcessSheet.Models.Project> ?? new();
+        }
+        <span>@T("bd_project") <b>@(Model.Project?.Name ?? T("bd_none"))</b></span>
+        <form asp-action="AssignToProject" method="post" class="inline-form" style="display:flex;gap:8px;align-items:center;margin-inline-start:auto">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="batchId" value="@Model.Id" />
+            <select class="input" name="projectId" style="min-width:180px">
+                <option value="0">@T("bd_none")</option>
+                @foreach (var p in myProjects)
+                {
+                    <option value="@p.Id" selected="@(Model.ProjectId == p.Id)">@p.Name</option>
+                }
+            </select>
+            <button class="btn btn-sm" type="submit">@T("save")</button>
+        </form>
+    </div>
+}
+
+@if (isQualityInspector && sentToMeCount > 0)
+{
+    <div class="flash flash-ok no-print" style="display:flex;align-items:center;gap:10px">
+        <span>@acceptedOfMine @T("bd_accepted_so_far1") @sentToMeCount @(sentToMeCount == 1 ? T("sn_sheet") : T("sn_sheets")) @T("bd_accepted_so_far2")</span>
+        @if (allConverted)
+        {
+            <a class="btn btn-sm btn-primary" style="margin-inline-start:auto" asp-action="SendToProgramsOps" asp-route-batchId="@Model.Id">@T("bd_send_to_programs")</a>
+        }
+    </div>
+}
+
+@if (isProgramsOps && total > 0)
+{
+    <div class="flash flash-ok no-print" style="display:flex;align-items:center;gap:10px">
+        <span>@T("bd_finalize_hint")</span>
+        <a class="btn btn-sm btn-primary" style="margin-inline-start:auto" asp-action="ProgramsFinalize" asp-route-batchId="@Model.Id">@T("bd_finalize_btn")</a>
+    </div>
+}
+
+<div class="page-head no-print">
+    <h1>@T("bd_batch_title") @Model.Name</h1>
+    <div class="head-actions">
+        @if (isCreator)
+        {
+            @if (total > 0 && !isDraft)
+            {
+                <a class="btn btn-primary" asp-controller="ProcessSheets" asp-action="Create" asp-route-batchId="@Model.Id">@T("bd_add_sheet")</a>
+            }
+            <a class="btn @(total == 0 ? "btn-primary" : "")" asp-action="ImportPdfBatch" asp-route-batchId="@Model.Id">@T("bd_import_drawings")</a>
+            <a class="btn" asp-action="EditDetails" asp-route-id="@Model.Id">@T("bd_edit_details")</a>
+        }
+        @if (isHolder && !hasResearchSheets)
+        {
+            <a class="btn btn-primary" asp-action="Review" asp-route-id="@Model.Id" asp-route-pos="0">@T("bd_review_sheets")</a>
+        }
+        @if (isHolder || isCreator)
+        {
+            <a class="btn" asp-action="PlaceStamps" asp-route-id="@Model.Id">@T("ix_place_stamp")</a>
+        }
+        <a class="btn" asp-action="Export" asp-route-id="@Model.Id" target="_blank">@T("bd_view_all_pdf")</a>
+        <a class="btn" asp-action="Index">@T("bd_back")</a>
+    </div>
+</div>
+
+@{
+    int convertedCount = ViewBag.ConvertedCount ?? 0;
+}
+@if (sheets.Any(s => s.HasDrawing) || convertedCount > 0)
+{
+    <div class="card" style="margin-bottom:18px">
+        <b>@T("bd_download")</b>
+        <div class="hint" style="margin:6px 0 14px" id="dlStep1Hint">@T("bd_download_q")</div>
+
+        <div class="dl-choice-grid" id="dlStep1">
+            @if (sheets.Any(s => s.HasDrawing))
+            {
+                <div class="dl-choice-card" data-target="dlHowDrawing">
+                    <div class="dl-choice-icon">📐</div>
+                    <div class="dl-choice-title">@T("bd_drawings_title")</div>
+                    <div class="dl-choice-sub">@T("bd_drawings_sub")</div>
+                </div>
+            }
+            @if (convertedCount > 0)
+            {
+                <div class="dl-choice-card" data-target="dlHowProcess">
+                    <div class="dl-choice-icon">📋</div>
+                    <div class="dl-choice-title">@T("bd_process_sheets_title")</div>
+                    <div class="dl-choice-sub">@T("bd_process_sheets_sub1")@convertedCount @T("cal_of") @total @(total == 1 ? T("sn_sheet") : T("sn_sheets")) @T("bd_process_sheets_sub2")</div>
+                </div>
+            }
+        </div>
+
+        @if (sheets.Any(s => s.HasDrawing))
+        {
+            <div class="dl-choice-grid dl-how-group" id="dlHowDrawing" style="display:none;margin-top:14px">
+                <a class="dl-choice-card" asp-action="DownloadDrawings" asp-route-id="@Model.Id" asp-route-mode="single">
+                    <div class="dl-choice-icon">📄</div>
+                    <div class="dl-choice-title">@T("bd_one_combined_pdf")</div>
+                    <div class="dl-choice-sub">@T("bd_one_combined_pdf_sub")</div>
+                </a>
+                <a class="dl-choice-card" asp-action="DownloadDrawings" asp-route-id="@Model.Id" asp-route-mode="zip">
+                    <div class="dl-choice-icon">🗂</div>
+                    <div class="dl-choice-title">@T("bd_separate_pdfs")</div>
+                    <div class="dl-choice-sub">@T("bd_separate_pdfs_sub")</div>
+                </a>
+            </div>
+        }
+        @if (convertedCount > 0)
+        {
+            <div class="dl-choice-grid dl-how-group" id="dlHowProcess" style="display:none;margin-top:14px">
+                <a class="dl-choice-card" asp-action="DownloadProcessSheets" asp-route-id="@Model.Id" asp-route-mode="single">
+                    <div class="dl-choice-icon">📋</div>
+                    <div class="dl-choice-title">@T("bd_one_combined_file")</div>
+                    <div class="dl-choice-sub">@T("bd_one_combined_file_sub")</div>
+                </a>
+                <a class="dl-choice-card" asp-action="DownloadProcessSheets" asp-route-id="@Model.Id" asp-route-mode="zip">
+                    <div class="dl-choice-icon">🗂</div>
+                    <div class="dl-choice-title">@T("bd_separate_files")</div>
+                    <div class="dl-choice-sub">@T("bd_separate_files_sub")</div>
+                </a>
+            </div>
+        }
+    </div>
+}
+
+<script>
+    (function () {
+      document.querySelectorAll('#dlStep1 .dl-choice-card').forEach(function (card) {
+        card.addEventListener('click', function () {
+          document.querySelectorAll('.dl-how-group').forEach(function (g) { g.style.display = 'none'; });
+          var target = document.getElementById(card.dataset.target);
+          if (target) target.style.display = 'grid';
+        });
+      });
+    })();
+</script>
+
+<div class="card">
+    <div class="batch-meta">
+        <span class="chip chip-angle">@Model.Status</span>
+        <span>@T("bd_project") <strong>@Model.ProjectName</strong></span>
+        @if (!string.IsNullOrWhiteSpace(Model.ContractNo))
+        {
+            <span class="sep">·</span><span>@T("bd_contract") <strong>@Model.ContractNo</strong></span>
+            <span>@T("bd_wo") <strong>@Model.WorkOrderNo</strong></span>
+        }
+        <span class="sep">·</span><span>@T("bd_total_qty") <strong>@Model.QtyMultiplier</strong></span>
+        <span class="sep">·</span><span><strong>@total</strong> @T("bd_sheets_label")</span>
+        <span class="sep">·</span><span>@T("bd_now_with_colon") <strong>@(Model.CurrentHolder?.FullName ?? "—")</strong></span>
+        @if (Model.CheckedBy != null)
+        {
+            <span class="sep">·</span><span>@T("bd_checked_by_colon") <strong>@Model.CheckedBy.FullName</strong></span>
+        }
+    </div>
+
+    @if (isHolder && !hasResearchSheets)
+    {
+        <div class="progress-wrap">
+            <div class="progress-bar"><span style="width:@(pct)%"></span></div>
+            <div class="progress-label">@done / @total @T("bd_reviewed")</div>
+        </div>
+        <form asp-action="Send" asp-route-id="@Model.Id" method="post" class="send-row" id="sendForm">
+            @Html.AntiForgeryToken()
+            <label>@T("bd_send_batch_to")</label>
+            <select class="input" name="toUserId" asp-items="recipients"></select>
+            <input class="input" name="note" placeholder="Note (optional)" />
+            <button class="btn btn-primary" type="submit" @(done < total ? "disabled" : "")>@T("bd_send_batch_btn")</button>
+        </form>
+        @if (done < total)
+        {
+            <p class="muted">@T("bd_review_unlock")</p>
+        }
+        else
+        {
+            <div class="holder-extra">
+                <form asp-action="Complete" asp-route-id="@Model.Id" method="post" class="inline-form">
+                    @Html.AntiForgeryToken()
+                    <button class="btn" type="submit">@T("bd_mark_complete")</button>
+                </form>
+                <form asp-action="ReturnRejects" asp-route-id="@Model.Id" method="post" class="inline-form">
+                    @Html.AntiForgeryToken()
+                    <input class="input" name="note" placeholder="Return note (optional)" />
+                    <button class="btn btn-danger" type="submit">@T("bd_return_rejected")</button>
+                </form>
+            </div>
+        }
+    }
+    @if (isHolder && hasResearchSheets && total > 0)
+    {
+        int convPct = (int)(100.0 * convertedCount / total);
+        <div class="progress-wrap">
+            <div class="progress-bar"><span style="width:@(convPct)%"></span></div>
+            <div class="progress-label">@convertedCount / @total @T("bd_converted_to_process")</div>
+        </div>
+    }
+</div>
+
+@if (isCreator && isDraft)
+{
+    <div class="card">
+        <div class="batch-meta">
+            <span class="chip chip-plate">@T("bd_draft")</span>
+            @if (total == 0)
+            {
+                <span>
+                    <strong>@T("bd_start_importing")</strong> @T("bd_import_hint")
+                    @if (isCoordinator)
+                    {
+                        <span> @T("bd_distribute_hint")</span>
+                    }
+                </span>
+            }
+            else
+            {
+                <span><strong>@total</strong> @T("bd_sheets_added1")</span>
+            }
+        </div>
+        <div class="holder-extra">
+            @if (total > 0)
+            {
+                <a class="btn btn-primary" asp-controller="ProcessSheets" asp-action="Create" asp-route-batchId="@Model.Id">@T("bd_add_sheet_blank")</a>
+                <form asp-action="QuickAddSheet" asp-route-batchId="@Model.Id" method="post" enctype="multipart/form-data" class="inline-form">
+                    @Html.AntiForgeryToken()
+                    <label class="btn btn-primary" style="cursor:pointer">
+                        @T("bd_add_sheet_drawing")
+                        <input type="file" name="file" accept="application/pdf" style="display:none"
+                               onchange="this.form.submit()" />
+                    </label>
+                </form>
+            }
+            <a class="btn @(total == 0 ? "btn-primary btn-lg" : "")" asp-action="ImportPdfBatch" asp-route-batchId="@Model.Id">@T("bd_import_auto")</a>
+            @if (isCoordinator && total == 0)
+            {
+                <a class="btn btn-lg" asp-action="DistributeDrawings">@T("bd_distribute_team")</a>
+            }
+            <form asp-action="Dispatch" asp-route-id="@Model.Id" method="post" class="inline-form" id="dispatchForm">
+                @Html.AntiForgeryToken()
+                @if (Model.RestrictedRecipientId.HasValue)
+                {
+                    <span class="chip chip-rej">@T("bd_rejected_returns_only")</span>
+                    <b>@(Model.RestrictedRecipient?.FullName ?? T("bd_the_reviewer"))</b>
+                    <input type="hidden" name="toUserId" value="@Model.RestrictedRecipientId" />
+                }
+                else
+                {
+                    <label>@T("bd_send_to_colon")</label>
+                    <select class="input" name="toUserId" asp-items="recipients"></select>
+                }
+                <select class="input" name="checkedById">
+                    <option value="">@T("bd_checked_by_none")</option>
+                    @foreach (var p in planners)
+                    {
+                        <option value="@p.Value" selected="@(p.Value == Model.CheckedById?.ToString())">@T("bd_checked_colon") @p.Text</option>
+                    }
+                </select>
+                <input class="input" name="note" placeholder="Note (optional)" />
+                <button class="btn btn-primary" type="submit" @(total == 0 ? "disabled" : "")>@T("bd_sign_send")</button>
+            </form>
+        </div>
+        <p class="muted">@T("bd_signature_hint")</p>
+    </div>
+}
+
+@{
+    var rejected = ViewBag.Rejected as List<TowerProcessSheet.Models.RejectionRow> ?? new();
+}
+@if (rejected.Count > 0)
+{
+    <h2 class="section-h">@T("bd_rejected_sheets_title") (@rejected.Count)</h2>
+    <table class="list-table">
+        <thead><tr><th>@T("bd_th_drawing")</th><th>@T("bd_th_rejected_by")</th><th>@T("bd_th_role")</th><th>@T("bd_th_reason")</th><th>@T("bd_th_when")</th><th class="actions-col"></th></tr></thead>
+        <tbody>
+            @foreach (var r in rejected)
+            {
+                <tr>
+                    <td><strong>@r.Drawing</strong></td>
+                    <td>@r.ReviewerName</td>
+                    <td><span class="chip chip-angle">@r.Slot</span></td>
+                    <td class="reject-cell">@r.Comment</td>
+                    <td class="muted">@r.At.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="actions-col"><a class="btn btn-sm" asp-action="Rejection" asp-route-sheetId="@r.SheetId" target="_blank">@T("bd_view_markup")</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<table class="list-table">
+    <thead><tr><th>#</th><th>@T("bd_th_drawing")</th><th>@T("bd_th_part")</th><th>Section</th><th>@T("bd_th_my_decision")</th><th class="actions-col"></th></tr></thead>
+    <tbody>
+        @{
+            int idx = (page - 1) * 50;
+        }
+        @foreach (var s in sheets)
+        {
+            idx++;
+            var status = myReviews.TryGetValue(s.Id, out var d)
+                ? (d == TowerProcessSheet.Models.ReviewDecision.Accepted ? "ok" : "rej") : "none";
+            <tr>
+                <td class="muted">@idx</td>
+                <td><strong>@s.DrawingNo</strong></td>
+                <td>
+                    @s.PartNo
+                    @if (s.WasResentAfterRejection)
+                    {
+                        <span class="chip chip-galv">@T("bd_resent_awaiting")</span>
+                    }
+                    else if (s.IsQualityRejected)
+                    {
+
+                        <span class="chip chip-rej">@T("bd_rejected_by_quality")</span>
+                    }
+                </td>
+                <td><span class="mono">@s.Section</span></td>
+                <td>
+                    @if (status == "ok")
+                    {
+                        <span class="chip chip-galv">@T("bd_accepted")</span>
+                    }
+                    else if (status == "rej")
+                    {
+
+                        <span class="chip chip-rej">@T("bd_rejected")</span>
+                    }
+                    else
+                    {
+
+                        <span class="muted">@T("bd_pending")</span>
+                    }
+                </td>
+                <td class="actions-col">
+                    <a class="btn btn-sm" asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@s.Id" target="_blank">@(s.IsConvertedFromResearch ? T("ix_view_process") : T("ix_view"))</a>
+                    @if (isProgramsOps && s.IsConvertedFromResearch)
+                    {
+                        <a class="btn btn-sm" asp-action="PerSheetFixStamp" asp-route-sheetId="@s.Id">@T("sn_fix_stamp")</a>
+                    }
+                    @if (s.HasDrawing)
+                    {
+                        <a class="btn btn-sm" asp-controller="ProcessSheets" asp-action="FullDrawing" asp-route-id="@s.Id" target="_blank">@T("bd_drawing_icon")</a>
+                    }
+                    @if (s.NeedsConversion && isPlanningDept)
+                    {
+                        <a class="btn btn-sm btn-primary" asp-controller="ProcessSheets" asp-action="ConvertToProcess" asp-route-id="@s.Id">@T("ix_convert_btn")</a>
+                    }
+                    @if (s.SiblingConvertedSheetId.HasValue)
+                    {
+                        <a class="btn btn-sm" asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@s.SiblingConvertedSheetId" target="_blank">@T("ix_view_process")</a>
+                    }
+                    @if (isHolder && !s.NeedsConversion && !s.IsConvertedFromResearch)
+                    {
+                        <a class="btn btn-sm btn-primary" asp-action="Review" asp-route-id="@Model.Id" asp-route-pos="@(idx - 1)">@T("bd_review_btn")</a>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if (pages > 1)
+{
+    <div class="pager">
+        @for (int p = 1; p <= pages; p++)
+        {
+            <a class="btn btn-sm @(p == page ? "btn-primary" : "")" asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@p">@p</a>
+        }
+    </div>
+}
+
+@{
+    var pipeline = ViewBag.Pipeline as List<TowerProcessSheet.Models.PipelineStage> ?? new();
+}
+@if (pipeline.Count > 0)
+{
+    <h2 class="section-h">@T("bd_pipeline")</h2>
+    <div class="pipeline">
+        @foreach (var st in pipeline)
+        {
+            <div class="pipe-stage">
+                <div class="pipe-role">@st.Slot</div>
+                <div class="pipe-name">@st.Name</div>
+                <div class="pipe-stats">
+                    <span class="chip chip-galv">@st.Accepted ✓</span>
+                    @if (st.Rejected > 0)
+                    {
+                        <span class="chip chip-rej">@st.Rejected ✗</span>
+                    }
+                </div>
+                <div class="pipe-when muted">@st.LastAt.ToString("yyyy-MM-dd HH:mm")</div>
+            </div>
+        }
+    </div>
+}
+
+<h2 class="section-h">@T("bd_history")</h2>
+<table class="list-table">
+    <thead><tr><th>@T("bd_th_when")</th><th>@T("bd_th_action")</th><th>@T("bd_th_from")</th><th>@T("bd_th_to")</th><th>@T("bd_th_note")</th></tr></thead>
+    <tbody>
+        @foreach (var t in Model.Transfers.OrderByDescending(t => t.At))
+        {
+            <tr>
+                <td class="muted">@t.At.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@t.Action</td>
+                <td>@(t.FromUser?.FullName ?? "—")</td>
+                <td>@(t.ToUser?.FullName ?? "—")</td>
+                <td>@t.Note</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@{
+    int placementCount = ViewBag.PlacementCount ?? 0;
+}
+@if (placementCount == 0)
+{
+    <script>
+        (function () {
+            var msg = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("bd_no_stamp_confirm")));
+            ['sendForm', 'dispatchForm'].forEach(function (id) {
+                var f = document.getElementById(id);
+                if (!f) return;
+                f.addEventListener('submit', function (e) {
+                    if (!window.confirm(msg)) e.preventDefault();
+                });
+            });
+        })();
+    </script>
+}

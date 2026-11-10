@@ -1,0 +1,80 @@
+@model List<ProcessSheet>
+@{
+    ViewData["Title"] = "All Sheets";
+    ViewData["FullWidth"] = true;
+    Func<string?, bool> isPlate = s =>
+        !string.IsNullOrWhiteSpace(s) &&
+        System.Text.RegularExpressions.Regex.IsMatch(s.Trim(), @"^\d+\*\d+\*\d+$");
+}
+
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">📄</div>
+        <div>
+            <h1>Process / Route Cards</h1>
+            <p>Generate, review and print fabrication route cards for transmission-tower parts — material, inspections, galvanizing and cost centers built automatically.</p>
+        </div>
+        <div class="mb-head-actions">
+            <div class="mb-stat-card" style="min-width:80px;padding:8px 16px">
+                <div class="mb-stat-num" style="font-size:20px">@Model.Count</div>
+                <div class="mb-stat-label">@(Model.Count == 1 ? "Sheet" : "Sheets")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.Count == 0)
+    {
+        <div class="mb-empty">
+            <p>No route cards yet. Create one from a drawing PDF, or fill the dropdowns by hand.</p>
+            <a class="btn btn-primary" asp-action="Create">Create your first sheet</a>
+        </div>
+    }
+    else
+    {
+    <table class="list-table">
+        <thead>
+            <tr>
+                <th>Drawing No.</th>
+                <th>Project</th>
+                <th>Section</th>
+                <th>Qty</th>
+                <th>Operations</th>
+                <th>Created</th>
+                <th class="actions-col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var s in Model)
+        {
+            var plate = isPlate(s.Section);
+            <tr>
+                <td><strong>@s.DrawingNo</strong></td>
+                <td>@s.ProjectName</td>
+                <td>
+                    <span class="cell-stack">
+                        <span class="chip @(plate ? "chip-plate" : "chip-angle")">@(plate ? "Plate" : "Angle")</span>
+                        <span class="mono">@s.Section</span>
+                    </span>
+                </td>
+                <td><span class="mono">@s.Qty</span></td>
+                <td>
+                    <span class="cell-stack">
+                        <span class="badge-count">@s.Operations.Count</span>
+                        @if (s.IncludeGalvanizing)
+                        {
+                            <span class="chip chip-galv">Galv</span>
+                        }
+                    </span>
+                </td>
+                <td class="muted">@s.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                <td class="actions-col">
+                    <a class="btn btn-sm" asp-action="Details" asp-route-id="@s.Id">View</a>
+                    <a class="btn btn-sm" asp-action="Edit" asp-route-id="@s.Id">Edit</a>
+                    <a class="btn btn-sm btn-danger" asp-action="Delete" asp-route-id="@s.Id">Delete</a>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    }
+</div>

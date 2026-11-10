@@ -1,0 +1,51 @@
+@model ProcessSheet
+@{
+    ViewData["Title"] = "Edit Sheet";
+    ViewData["FullWidth"] = true;
+    int? nextToConvertId = ViewBag.NextToConvertId;
+    bool hasDrawing = (Model.StampedDrawingImage != null && Model.StampedDrawingImage.Length > 0)
+        || (Model.FullDrawingImage != null && Model.FullDrawingImage.Length > 0)
+        || (Model.DiagramImage != null && Model.DiagramImage.Length > 0);
+    // Cancel always goes back to the batch this sheet belongs to (not out to the full list).
+    string cancelHref = Model.BatchId.HasValue
+        ? Url.Action("Details", "Batches", new { id = Model.BatchId.Value })!
+        : Url.Action("Details", "ProcessSheets", new { id = Model.Id })!;
+}
+
+<div class="page-head">
+    <h1>Edit Sheet — @Model.DrawingNo</h1>
+    <div class="head-actions">
+        @if (hasDrawing)
+        {
+            <a class="btn btn-primary" asp-action="FullDrawing" asp-route-id="@Model.Id" target="_blank">⤢ View drawing</a>
+        }
+        @if (ViewBag.PartListProjectId != null)
+        {
+            <a class="btn btn-primary" asp-controller="Batches" asp-action="PartList" asp-route-projectId="@ViewBag.PartListProjectId" target="_blank">📎 Part List</a>
+            <a class="btn" asp-controller="Batches" asp-action="PartListStatus" asp-route-projectId="@ViewBag.PartListProjectId" asp-route-q="@Model.PartNo" target="_blank">☑ Part List check</a>
+        }
+        <a class="btn" href="@cancelHref">Cancel</a>
+    </div>
+</div>
+
+@if (nextToConvertId.HasValue)
+{
+    <div class="flash flash-ok" style="display:flex;align-items:center;gap:10px">
+        <span>Save this sheet's Steps, then keep going — there's at least one more drawing in this batch waiting to be converted.</span>
+        <a class="btn btn-sm btn-primary" style="margin-inline-start:auto" asp-controller="ProcessSheets" asp-action="ConvertToProcess" asp-route-id="@nextToConvertId">Next drawing →</a>
+    </div>
+}
+
+<form asp-action="Edit" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+    <partial name="_SheetForm" model="Model" />
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a class="btn" href="@cancelHref">Cancel</a>
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/js/operations-editor.js" asp-append-version="true"></script>
+}

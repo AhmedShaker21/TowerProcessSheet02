@@ -1,0 +1,23 @@
+@model List<AppUser>
+@{ ViewData["Title"] = "Users"; }
+<div class="page-head no-print">
+    <h1>Users</h1>
+    <div class="head-actions"><a class="btn btn-primary" asp-action="Create">+ New User</a></div>
+</div>
+<table class="list-table">
+    <thead><tr><th>Username</th><th>Full name</th><th>Department</th><th>Role</th><th>Stamp</th><th>Status</th><th class="actions-col"></th></tr></thead>
+    <tbody>
+    @foreach (var u in Model)
+    {
+        <tr>
+            <td><strong>@u.Username</strong> @if (u.IsAdmin) { <span class="chip chip-galv">Admin</span> }</td>
+            <td>@u.FullName</td>
+            <td>@u.Department</td>
+            <td><span class="chip chip-angle">@u.Slot</span></td>
+            <td>@if (u.HasStamp) { <img class="stamp-mini" src="@Url.Action("Stamp", "Account", new { id = u.Id })" /> } else { <span class="muted">—</span> }</td>
+            <td>@(u.IsActive ? "Active" : "Disabled")</td>
+            <td class="actions-col"><a class="btn btn-sm" asp-action="Edit" asp-route-id="@u.Id">Edit</a></td>
+        </tr>
+    }
+    </tbody>
+</table>

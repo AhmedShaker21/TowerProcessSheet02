@@ -1,0 +1,95 @@
+@model ProcessSheet
+@{
+    Layout = null;
+    bool hasFull = ViewBag.HasFull;
+    string src = hasFull ? Url.Action("FullDrawingImage", new { id = Model.Id })! : Url.Action("DiagramImage", new { id = Model.Id })!;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Drawing @Model.DrawingNo</title>
+    <style>
+        html, body { margin: 0; height: 100%; background: #12203f; overflow: hidden; }
+        .bar { position: fixed; top: 0; inset-inline: 0; z-index: 5; display: flex; align-items: center; gap: 12px;
+            padding: 10px 16px; background: rgba(15,25,60,.92); color: #fff; font: 600 13.5px 'Segoe UI', Arial, sans-serif; }
+        .bar b { font-weight: 800; }
+        .bar .sp { flex: 1; }
+        .bar button, .bar a { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); color: #fff;
+            border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; text-decoration: none; }
+        .bar button:hover, .bar a:hover { background: rgba(255,255,255,.22); }
+        .stage { position: absolute; inset: 48px 0 0 0; overflow: auto; display: flex; align-items: flex-start;
+            justify-content: center; padding: 24px; box-sizing: border-box; }
+        .stage img { max-width: none; box-shadow: 0 20px 60px rgba(0,0,0,.5); background: #fff;
+            transition: width .12s linear; cursor: grab; }
+        .stage img:active { cursor: grabbing; }
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <b>Drawing @Model.DrawingNo</b>
+        <span>— @Model.ProjectName</span>
+        <div class="sp"></div>
+        <button type="button" id="zoomOut">−</button>
+        <span id="zoomLabel">100%</span>
+        <button type="button" id="zoomIn">+</button>
+        <button type="button" id="zoomReset">Fit</button>
+        <a href="@src" target="_blank">Open image in new tab</a>
+        <button type="button" onclick="closeThisTab()">Close</button>
+    </div>
+    <div class="stage" id="stage">
+        <img id="img" src="@src" alt="Drawing @Model.DrawingNo" />
+    </div>
+
+    <script>
+    // Browsers block window.close() on tabs opened by a normal link click (as opposed to
+    // window.open() from script) — this is almost always how this page is reached, so the
+    // plain window.close() call silently did nothing. Try it anyway (works in a few cases),
+    // then fall back to going back in this tab's history, or the Inbox if there's nowhere to go.
+    function closeThisTab() {
+        window.close();
+        setTimeout(function () {
+            if (window.history.length > 1) window.history.back();
+            else window.location.href = '@Url.Action("Index", "Batches")';
+        }, 150);
+    }
+    (function () {
+        var img = document.getElementById('img');
+        var stage = document.getElementById('stage');
+        var label = document.getElementById('zoomLabel');
+        var pct = 100;
+
+        function fit() {
+            // Fit the image to the available window width on first load.
+            var natural = img.naturalWidth || 1000;
+            var avail = stage.clientWidth - 48;
+            pct = Math.min(100, Math.round((avail / natural) * 100));
+            if (pct < 20) pct = 20;
+            apply();
+        }
+        function apply() {
+            img.style.width = pct + '%';
+            label.textContent = pct + '%';
+        }
+        document.getElementById('zoomIn').addEventListener('click', function () { pct = Math.min(400, pct + 20); apply(); });
+        document.getElementById('zoomOut').addEventListener('click', function () { pct = Math.max(20, pct - 20); apply(); });
+        document.getElementById('zoomReset').addEventListener('click', fit);
+
+        // Click-and-drag to pan around when zoomed in.
+        var dragging = false, sx = 0, sy = 0, sl = 0, st = 0;
+        img.addEventListener('pointerdown', function (e) {
+            dragging = true; sx = e.clientX; sy = e.clientY; sl = stage.scrollLeft; st = stage.scrollTop;
+            img.setPointerCapture(e.pointerId);
+        });
+        img.addEventListener('pointermove', function (e) {
+            if (!dragging) return;
+            stage.scrollLeft = sl - (e.clientX - sx);
+            stage.scrollTop = st - (e.clientY - sy);
+        });
+        img.addEventListener('pointerup', function () { dragging = false; });
+
+        if (img.complete) fit(); else img.addEventListener('load', fit);
+    })();
+    </script>
+</body>
+</html>

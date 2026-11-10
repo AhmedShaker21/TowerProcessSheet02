@@ -1,0 +1,84 @@
+@model TowerProcessSheet.Models.AppUser
+@{
+    ViewData["Title"] = "Stamp fields";
+}
+<div class="page-head no-print">
+    <h1>Configure stamp fields</h1>
+    <a class="btn" asp-action="Profile">Back</a>
+</div>
+
+<div class="flash flash-ok">
+    If your stamp has <b>Date / Issue / Copy No.</b> written on it, turn the option on and drag each label to its exact
+    spot on the stamp. This is saved <b>once</b> — every time you place this stamp, the system fills the values there
+    automatically (date auto-generated, all editable).
+</div>
+
+<form asp-action="StampFields" method="post" id="sfForm" class="card">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="fieldsJson" id="fieldsJson" />
+    <div class="tb-row" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <label class="chk"><input type="checkbox" id="hasFields" /> My stamp has Date / Issue / Copy No. fields</label>
+        <label>Text size <input type="range" id="fsize" min="4" max="18" value="8" /></label>
+        <button class="btn btn-primary" type="submit">Save</button>
+    </div>
+
+    <div class="sf-wrap" id="sfWrap">
+        <img id="sfImg" src="@Url.Action("Stamp", new { id = Model.Id })" alt="stamp" />
+        <div class="sf-chip" data-k="date" style="left:30%;top:60%">Date</div>
+        <div class="sf-chip" data-k="issue" style="left:75%;top:60%">Issue</div>
+        <div class="sf-chip" data-k="copy" style="left:52%;top:82%">Copy No.</div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+(function(){
+  var wrap = document.getElementById('sfWrap');
+  var has = document.getElementById('hasFields');
+  var fsize = document.getElementById('fsize');
+  var existing = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StampFieldsJson));
+  var cfg = null;
+  try { cfg = existing ? JSON.parse(existing) : null; } catch(e) { cfg = null; }
+
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.sf-chip'));
+  function applyCfg(){
+    if (!cfg) return;
+    has.checked = !!cfg.hasFields;
+    if (cfg.size) fsize.value = cfg.size;
+    (cfg.fields || []).forEach(function(f){
+      var chip = chips.find(function(c){ return c.dataset.k === f.k; });
+      if (chip) { chip.style.left = (f.x*100)+'%'; chip.style.top = (f.y*100)+'%'; }
+    });
+    refresh();
+  }
+  function refresh(){ wrap.classList.toggle('off', !has.checked); }
+  has.addEventListener('change', refresh);
+
+  chips.forEach(function(chip){
+    var dragging = false;
+    chip.addEventListener('pointerdown', function(e){ dragging = true; chip.setPointerCapture(e.pointerId); e.preventDefault(); });
+    chip.addEventListener('pointermove', function(e){
+      if(!dragging) return;
+      var r = wrap.getBoundingClientRect();
+      chip.style.left = (Math.min(Math.max((e.clientX-r.left)/r.width,0),1)*100)+'%';
+      chip.style.top  = (Math.min(Math.max((e.clientY-r.top)/r.height,0),1)*100)+'%';
+    });
+    chip.addEventListener('pointerup', function(){ dragging = false; });
+  });
+
+  document.getElementById('sfForm').addEventListener('submit', function(){
+    var r = wrap.getBoundingClientRect();
+    var fields = chips.map(function(c){
+      var b = c.getBoundingClientRect();
+      return { k: c.dataset.k,
+               x: +(((b.left + b.width/2 - r.left)/r.width).toFixed(4)),
+               y: +(((b.top + b.height/2 - r.top)/r.height).toFixed(4)) };
+    });
+    var out = has.checked ? { hasFields:true, size:+fsize.value, fields:fields } : null;
+    document.getElementById('fieldsJson').value = out ? JSON.stringify(out) : '';
+  });
+
+  applyCfg(); refresh();
+})();
+</script>
+}

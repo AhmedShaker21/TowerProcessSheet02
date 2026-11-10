@@ -1,0 +1,60 @@
+﻿@using TowerProcessSheet.Controllers
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Search by Contract / Work Order";
+    string? q = ViewBag.Query;
+    var results = ViewBag.Results as List<BatchesController.ContractSearchResult> ?? new();
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("sw_title")</h1>
+</div>
+
+<form method="get" class="card" style="display:flex;gap:10px;align-items:end;margin-bottom:20px">
+    <div class="field" style="flex:1;margin:0">
+        <label>@T("sw_label")</label>
+        <input class="input" name="q" value="@q" placeholder="e.g. 36/2026 or 431-256-005" autofocus />
+    </div>
+    <button class="btn btn-primary" type="submit">@T("sw_search_btn")</button>
+</form>
+
+@if (!string.IsNullOrWhiteSpace(q))
+{
+    @if (results.Count == 0)
+    {
+        <div class="empty">@T("sw_no_results1") "@q" @T("sw_no_results2")</div>
+    }
+    else
+    {
+        <table class="list-table">
+            <thead><tr><th>@T("sw_th_batch")</th><th>@T("sw_th_contract")</th><th>@T("sw_th_wo")</th><th>@T("sw_th_status")</th><th class="actions-col"></th></tr></thead>
+            <tbody>
+                @foreach (var r in results)
+                {
+                    <tr>
+                        <td><strong>@r.BatchName</strong></td>
+                        <td>@(r.ContractNotificationNo ?? "—")</td>
+                        <td>@(r.WorkOrderNo ?? "—")</td>
+                        <td>
+                            @if (r.IsCurrent)
+                            {
+                                <span class="chip chip-galv">@T("sw_current")</span>
+                            }
+                            else
+                            {
+                                <span class="chip chip-angle">@T("sw_was_active") @r.ActiveFrom?.ToString("yyyy-MM-dd") → @r.ActiveTo?.ToString("yyyy-MM-dd")</span>
+                            }
+                        </td>
+                        <td class="actions-col">
+                            @if (r.BatchId.HasValue)
+                            {
+                                <a class="btn btn-sm" asp-action="Details" asp-route-id="@r.BatchId">@T("ix_open_batch")</a>
+                                <a class="btn btn-sm" asp-action="ProgramsFinalizeHistoryFor" asp-route-batchId="@r.BatchId">@T("sw_full_history")</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}

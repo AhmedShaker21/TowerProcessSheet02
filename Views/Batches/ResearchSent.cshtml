@@ -1,0 +1,60 @@
+@using TowerProcessSheet.Controllers
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Sent";
+    ViewData["FullWidth"] = true;
+    var sent = ViewBag.Sent as List<BatchesController.SentBatchRow> ?? new();
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon">✓</div>
+        <div>
+            <h1>@T("sn_title")</h1>
+            <p>@T("sn_sub")</p>
+        </div>
+        <div class="mb-head-actions">
+            <a class="btn" asp-action="ResearchHistory">@T("sn_view_history")</a>
+            <a class="btn btn-primary" asp-action="ResearchSplit">@T("sn_send_more")</a>
+        </div>
+    </div>
+
+    <div class="mb-list">
+        @foreach (var b in sent)
+        {
+            <div class="mb-row" style="flex-direction:column;align-items:stretch">
+                <div style="display:flex;align-items:center;gap:16px;width:100%">
+                    <div class="mb-row-icon">📦</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">@b.ToName <span class="mb-row-code">@T("sn_copy_no") @b.ToCode</span></div>
+                        <div class="mb-row-sub">@b.Name @(string.IsNullOrEmpty(b.ProjectName) ? "" : $"· {b.ProjectName}")</div>
+                        <div class="mb-row-sub">@T("sn_created") @b.CreatedAt.ToString("yyyy-MM-dd HH:mm") @(b.ReachedAt.HasValue ? $"· {T("sn_reached")} {b.ReachedAt.Value:yyyy-MM-dd HH:mm}" : "")</div>
+                    </div>
+                    <div class="mb-row-count">@b.SheetCount <span>@(b.SheetCount == 1 ? T("sn_sheet") : T("sn_sheets"))</span></div>
+                    <div class="mb-row-actions">
+                        <a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">@T("sn_open_batch")</a>
+                    </div>
+                </div>
+                @if (b.Sheets.Count > 0)
+                {
+                    <div class="sent-thumb-grid">
+                        @foreach (var s in b.Sheets)
+                        {
+                            <div class="sent-thumb">
+                                <a asp-controller="ProcessSheets" asp-action="FullDrawing" asp-route-id="@s.Id" target="_blank" title="Open full window">
+                                    <img src="@Url.Action("FullDrawingImage", "ProcessSheets", new { id = s.Id })" alt="@s.DrawingNo" loading="lazy" />
+                                </a>
+                                <div class="sent-thumb-label">@s.DrawingNo <span>@s.Section</span></div>
+                                <a class="btn btn-sm" style="width:100%;justify-content:center" asp-action="ResearchFixStamp" asp-route-id="@s.Id">@T("sn_fix_stamp")</a>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        @if (sent.Count == 0)
+        {
+            <div class="mb-empty">@T("sn_empty")</div>
+        }
+    </div>
+</div>

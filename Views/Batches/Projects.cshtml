@@ -1,0 +1,141 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using TowerProcessSheet.Models
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Projects";
+    ViewData["FullWidth"] = true;
+    var projects = ViewBag.Projects as List<Project> ?? new();
+    var batchesByProject = ViewBag.BatchesByProject as Dictionary<int, List<Batch>> ?? new();
+    var unassigned = ViewBag.Unassigned as List<Batch> ?? new();
+    bool isCoordinator = ViewBag.IsCoordinator ?? false;
+    bool isAdmin = User.IsInRole("Admin");
+    var myCreatedProjectIds = ViewBag.MyCreatedProjectIds as List<int> ?? new();
+    var planners = ViewBag.Planners as List<SelectListItem> ?? new();
+    var partListProjectIds = ViewBag.PartListProjectIds as List<int> ?? new();
+    var partListExistsProjectIds = ViewBag.PartListExistsProjectIds as List<int> ?? new();
+    // The Part List check is a planning tool: for them any project with a Part List shows it,
+    // whether or not it has been marked as sent along to Quality yet.
+    bool isPlanning = isAdmin || User.IsInRole("Planner") || User.IsInRole("Coordinator");
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">🗂</div>
+        <div>
+            <h1>@T("pj_title")</h1>
+            <p>@T("pj_sub")</p>
+        </div>
+    </div>
+
+    @foreach (var p in projects)
+    {
+        var batches = batchesByProject.TryGetValue(p.Id, out var list) ? list : new List<Batch>();
+        <details class="mb-row" style="flex-direction:column;align-items:stretch;cursor:default" open>
+            <summary style="display:flex;align-items:center;gap:16px;width:100%;cursor:pointer;list-style:none">
+                <div class="mb-row-icon">🗂</div>
+                <div class="mb-row-body">
+                    <div class="mb-row-title">@p.Name</div>
+                    <div class="mb-row-sub">@T("sn_created") @p.CreatedAt.ToString("yyyy-MM-dd")</div>
+                </div>
+                <div class="mb-row-count">@batches.Count <span>@(batches.Count == 1 ? T("pj_batch") : T("pj_batches"))</span></div>
+            </summary>
+            @if (partListProjectIds.Contains(p.Id) || (isPlanning && partListExistsProjectIds.Contains(p.Id)))
+            {
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                    <a class="btn btn-sm" asp-action="PartList" asp-route-projectId="@p.Id" target="_blank">@T("pl_open")</a>
+                    @if (isPlanning)
+                    {
+                        <a class="btn btn-sm btn-primary" asp-action="PartListStatus" asp-route-projectId="@p.Id">@T("plc_link")</a>
+                    }
+                </div>
+            }
+            @if (isCoordinator && myCreatedProjectIds.Contains(p.Id))
+            {
+                <form asp-action="ReassignProject" method="post" class="inline-form" style="display:flex;gap:8px;align-items:center;margin-top:10px" onclick="event.stopPropagation()">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="projectId" value="@p.Id" />
+                    <label style="font-size:13px;font-weight:600">
+                        @T("pj_assign_whole")
+                        <select class="input" name="toUserId" asp-items="planners" style="min-width:180px"></select>
+                    </label>
+                    <button class="btn btn-sm btn-primary" type="submit">@T("bd_assign_btn")</button>
+                </form>
+            }
+            @if (isAdmin)
+            {
+                <form asp-action="DeleteProject" method="post" class="inline-form" style="margin-top:10px" onclick="event.stopPropagation()"
+                      onsubmit="return confirm(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("pj_delete_project_confirm"))))">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@p.Id" />
+                    <button class="btn btn-sm btn-danger" type="submit">@T("pj_delete_project")</button>
+                </form>
+            }
+            @if (batches.Count > 0)
+            {
+                <div class="mb-list" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
+                    @foreach (var b in batches)
+                    {
+                        var sentAt = b.Transfers.OrderByDescending(t => t.At).FirstOrDefault()?.At ?? b.CreatedAt;
+                        <div class="mb-row">
+                            <div class="mb-row-icon">📄</div>
+                            <div class="mb-row-body">
+                                <div class="mb-row-title">@b.Name</div>
+                                <div class="mb-row-sub">@T("ix_now_with") @(b.CurrentHolder?.FullName ?? b.CreatedBy?.FullName ?? "—") · @T("pj_sent_at") @sentAt.ToString("yyyy-MM-dd HH:mm")</div>
+                            </div>
+                            <div class="mb-row-actions">
+                                <a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">@T("ix_open")</a>
+                                @if (isAdmin)
+                                {
+                                    <form asp-action="DeleteBatch" method="post" class="inline-form"
+                                          onsubmit="return confirm(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("pj_delete_batch_confirm"))))">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@b.Id" />
+                                        <button class="btn btn-sm btn-danger" type="submit">@T("pj_delete_batch")</button>
+                                    </form>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="mb-empty">@T("pj_empty_project")</div>
+            }
+        </details>
+    }
+    @if (projects.Count == 0)
+    {
+        <div class="mb-empty">@T("pj_no_projects")</div>
+    }
+
+    @if (unassigned.Count > 0)
+    {
+        <h2 class="mb-section-h">@T("pj_unassigned_title")</h2>
+        <div class="mb-list">
+            @foreach (var b in unassigned)
+            {
+                var sentAt = b.Transfers.OrderByDescending(t => t.At).FirstOrDefault()?.At ?? b.CreatedAt;
+                <div class="mb-row">
+                    <div class="mb-row-icon">📄</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">@b.Name</div>
+                        <div class="mb-row-sub">@T("pj_sent_at") @sentAt.ToString("yyyy-MM-dd HH:mm")</div>
+                    </div>
+                    <div class="mb-row-actions">
+                        <a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">@T("ix_open")</a>
+                        @if (isAdmin)
+                        {
+                            <form asp-action="DeleteBatch" method="post" class="inline-form"
+                                  onsubmit="return confirm(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(T("pj_delete_batch_confirm"))))">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@b.Id" />
+                                <button class="btn btn-sm btn-danger" type="submit">@T("pj_delete_batch")</button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

@@ -1,0 +1,95 @@
+﻿@using TowerProcessSheet.Controllers
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Finalize";
+    ViewData["FullWidth"] = true;
+    var groups = ViewBag.Groups as List<BatchesController.ProgramsDeliveryGroup> ?? new();
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">🧾</div>
+        <div>
+            <h1>@T("pi_title")</h1>
+            <p>@T("pi_sub")</p>
+        </div>
+        <div class="mb-head-actions">
+            <div class="mb-stat-card" style="min-width:80px;padding:8px 16px">
+                <div class="mb-stat-num" style="font-size:20px">@groups.Count</div>
+                <div class="mb-stat-label">@(groups.Count == 1 ? T("pi_batch") : T("pi_batches"))</div>
+            </div>
+        </div>
+    </div>
+
+    @if (groups.Count == 0)
+    {
+        <div class="mb-empty">@T("pi_empty")</div>
+    }
+    else
+    {
+        @foreach (var g in groups)
+        {
+            int stepsDone = (g.Finalized ? 1 : 0) + (g.Stamped ? 1 : 0);
+            int pct = stepsDone * 50;
+            <details class="mb-row" style="flex-direction:column;align-items:stretch;cursor:default" open>
+                <summary style="display:flex;align-items:center;gap:16px;width:100%;cursor:pointer;list-style:none">
+                    <div class="mb-row-icon">📦</div>
+                    <div class="mb-row-body">
+                        <div class="mb-row-title">
+                            @T("qi_batch_pre") "@g.BatchName"
+                            @if (!string.IsNullOrWhiteSpace(g.ProjectName))
+                            {
+                                <span class="mb-row-code">@T("qi_from_project") @g.ProjectName</span>
+                            }
+                        </div>
+                        <div class="progress-wrap" style="margin-top:6px;max-width:320px">
+                            <div class="progress-bar"><span style="width:@(pct)%"></span></div>
+                            <div class="progress-label">@(g.Finalized ? T("pi_finalized") : T("pi_not_finalized")) · @(g.Stamped ? T("pi_stamped") : T("pi_not_stamped"))</div>
+                        </div>
+                    </div>
+                    <div class="mb-row-actions">
+                        @if (!g.Finalized)
+                        {
+                            <a class="btn btn-sm btn-primary" asp-action="ProgramsFinalize" asp-route-batchId="@g.BatchId">@T("pi_finalize_first")</a>
+                        }
+                        else if (!g.Stamped)
+                        {
+                            <a class="btn btn-sm btn-primary" asp-action="ProgramsFinalize" asp-route-batchId="@g.BatchId">@T("pi_refinalize")</a>
+                        }
+                        else
+                        {
+                            <a class="btn btn-sm" asp-action="ProgramsFinalize" asp-route-batchId="@g.BatchId">@T("pi_edit_finalize")</a>
+                        }
+                    </div>
+                </summary>
+
+                <div class="sent-thumb-grid" style="margin-top:12px">
+                    @foreach (var s in g.Sheets)
+                    {
+                        <div class="sent-thumb sent-thumb-noimg">
+                            <div class="sent-thumb-preview">
+                                <iframe src="@Url.Action("Preview", "ProcessSheets", new { id = s.Id, t = DateTime.Now.Ticks })" scrolling="no" title="Preview"></iframe>
+                                @if (s.Id == g.FirstSheetId)
+                                {
+                                    <span class="sent-thumb-badge" title="@T("pi_first_sheet_tip")">1️⃣</span>
+                                }
+                                else if (g.Stamped)
+                                {
+                                    <span class="sent-thumb-badge">✅</span>
+                                }
+                            </div>
+                            <div class="sent-thumb-label">@s.PartNo <span>@s.Section</span></div>
+                            <a class="btn btn-sm" style="width:100%;justify-content:center" asp-controller="ProcessSheets" asp-action="Details" asp-route-id="@s.Id">@(s.ConvertedToProcess ? T("ix_view_process") : T("ix_view"))</a>
+                        </div>
+                    }
+                </div>
+            </details>
+        }
+    }
+</div>
+
+<style>
+    details.mb-row summary::-webkit-details-marker {
+        display: none;
+    }
+</style>

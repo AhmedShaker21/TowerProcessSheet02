@@ -1,0 +1,82 @@
+@{
+    ViewData["Title"] = "Mark this file";
+    string token = ViewBag.Token;
+    int batchId = ViewBag.BatchId;
+    string file = ViewBag.File;
+    string nameLabel = ViewBag.NameFieldLabel;
+    string previewImage = ViewBag.PreviewImage;
+}
+<div class="page-head no-print">
+    <h1>Mark <span class="mono">@nameLabel</span> on this drawing</h1>
+    <a class="btn" asp-action="CalibrationResult" asp-route-token="@token" asp-route-batchId="@batchId">Cancel</a>
+</div>
+
+<div class="hint">
+    File: <b class="mono">@file</b>. The box you used for the rest of the batch came back blank here — draw a box around
+    <b>@nameLabel</b> on this specific drawing.
+</div>
+
+<div class="place-toolbar no-print">
+    <button type="button" id="applyBtn" class="btn btn-primary btn-lg">Save this box &amp; add to batch</button>
+</div>
+
+<form asp-action="ApplyRetryOne" method="post" id="retryForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="token" value="@token" />
+    <input type="hidden" name="batchId" value="@batchId" />
+    <input type="hidden" name="file" value="@file" />
+    <input type="hidden" name="rectJson" id="rectJson" />
+</form>
+
+<div class="cal-canvas-wrap" id="calWrap">
+    <img src="@previewImage" alt="drawing preview" id="calImg" />
+</div>
+
+@section Scripts {
+<script>
+(function () {
+  var wrap = document.getElementById('calWrap');
+  var rect = null;
+  var dragging = false, startX = 0, startY = 0, tempBox = null;
+
+  wrap.addEventListener('pointerdown', function (e) {
+    var r = wrap.getBoundingClientRect();
+    startX = (e.clientX - r.left) / r.width; startY = (e.clientY - r.top) / r.height;
+    dragging = true;
+    if (tempBox) tempBox.remove();
+    tempBox = document.createElement('div');
+    tempBox.className = 'cal-box cal-box-live';
+    tempBox.style.borderColor = '#2f6fed';
+    wrap.appendChild(tempBox);
+    wrap.setPointerCapture(e.pointerId);
+  });
+  wrap.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    var r = wrap.getBoundingClientRect();
+    var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+    var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+    var left = Math.min(x, startX), top = Math.min(y, startY);
+    var w = Math.abs(x - startX), h = Math.abs(y - startY);
+    tempBox.style.left = (left * 100) + '%'; tempBox.style.top = (top * 100) + '%';
+    tempBox.style.width = (w * 100) + '%'; tempBox.style.height = (h * 100) + '%';
+  });
+  wrap.addEventListener('pointerup', function (e) {
+    if (!dragging) return;
+    dragging = false;
+    var r = wrap.getBoundingClientRect();
+    var x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+    var y = Math.min(Math.max((e.clientY - r.top) / r.height, 0), 1);
+    var left = Math.min(x, startX), top = Math.min(y, startY);
+    var w = Math.abs(x - startX), h = Math.abs(y - startY);
+    if (w < 0.01 || h < 0.01) { if (tempBox) { tempBox.remove(); tempBox = null; } return; }
+    rect = [left, top, w, h];
+  });
+
+  document.getElementById('applyBtn').addEventListener('click', function () {
+    if (!rect) { alert('Draw a box around it first.'); return; }
+    document.getElementById('rectJson').value = JSON.stringify(rect);
+    document.getElementById('retryForm').submit();
+  });
+})();
+</script>
+}

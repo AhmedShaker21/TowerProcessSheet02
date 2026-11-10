@@ -1,0 +1,62 @@
+@model AppUser
+@{ ViewData["Title"] = $"Edit {Model.Username}"; }
+<div class="page-head no-print"><h1>Edit @Model.Username</h1></div>
+<form class="card" asp-action="Edit" asp-route-id="@Model.Id" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+    <div class="grid-3">
+        <div class="field"><label>Username (login)</label><input class="input" name="username" value="@Model.Username" autocomplete="off" /></div>
+        <div class="field"><label>Full name</label><input class="input" name="fullName" value="@Model.FullName" /></div>
+        <div class="field"><label>Department</label><input class="input" name="department" value="@Model.Department" list="deptList" />
+            <datalist id="deptList">@foreach (var d in (ViewBag.Departments as List<string> ?? new())) { <option value="@d"></option> }</datalist></div>
+        <div class="field">
+            <label>Role (stamp slot)</label>
+            <select class="input" name="slot">
+                @foreach (var s in Enum.GetValues<SignOffSlot>())
+                { <option value="@s" selected="@(s == Model.Slot)">@s</option> }
+            </select>
+        </div>
+    </div>
+    <div class="grid-3">
+        <div class="field"><label>Admin?</label>
+            <select class="input" name="isAdmin"><option value="false" selected="@(!Model.IsAdmin)">No</option><option value="true" selected="@(Model.IsAdmin)">Yes</option></select>
+        </div>
+        <div class="field"><label>Planner?</label>
+            <select class="input" name="isPlanner"><option value="false" selected="@(!Model.IsPlanner)">No</option><option value="true" selected="@(Model.IsPlanner)">Yes</option></select>
+        </div>
+        <div class="field">
+            <label>Wall screen account (pipeline only)</label>
+            <select class="input" name="isDisplay"><option value="false" selected="@(!Model.IsDisplay)">No</option><option value="true" selected="@(Model.IsDisplay)">Yes</option></select>
+        </div>
+        <div class="field"><label>Active?</label>
+            <select class="input" name="isActive"><option value="true" selected="@(Model.IsActive)">Yes</option><option value="false" selected="@(!Model.IsActive)">No</option></select>
+        </div>
+        <div class="field"><label>Coordinator? (distributes/splits batches)</label>
+            <select class="input" name="isCoordinator"><option value="false" selected="@(!Model.IsCoordinator)">No</option><option value="true" selected="@(Model.IsCoordinator)">Yes</option></select>
+        </div>
+        <div class="field"><label>Sector Manager? (Team Workload dashboard)</label>
+            <select class="input" name="isSectorManager"><option value="false" selected="@(!Model.IsSectorManager)">No</option><option value="true" selected="@(Model.IsSectorManager)">Yes</option></select>
+        </div>
+        <div class="field"><label>Receives Research's Angle drawings?</label>
+            <select class="input" name="isAngleWorkshop"><option value="false" selected="@(!Model.IsAngleWorkshop)">No</option><option value="true" selected="@(Model.IsAngleWorkshop)">Yes</option></select>
+        </div>
+        <div class="field"><label>Receives Research's Plate drawings?</label>
+            <select class="input" name="isPlateWorkshop"><option value="false" selected="@(!Model.IsPlateWorkshop)">No</option><option value="true" selected="@(Model.IsPlateWorkshop)">Yes</option></select>
+        </div>
+        <div class="field"><label>Stamp code (e.g. HAF 59)</label><input class="input" name="stampCode" value="@Model.StampCode" /></div>
+    </div>
+    <div class="hint">Only one account can hold "Receives Angle drawings" and one can hold "Receives Plate drawings" at a time — turning it on here turns it off wherever it was before.</div>
+    <div class="grid-2">
+        <div class="field"><label>Doc-Control sector (Quality)</label><input class="input" name="sector" value="@Model.Sector" placeholder="e.g. R & D Sector / Production Sector" /></div>
+        <div class="field"><label>Issue number</label><input class="input" name="docIssue" value="@Model.DocIssue" placeholder="e.g. 1" /></div>
+    </div>
+    <div class="field"><label>Reset password (blank = keep)</label><input class="input" type="password" name="newPassword" /></div>
+    <div class="grid-2">
+        <div class="field"><label>Replace stamp</label><input class="input file-input" type="file" name="stamp" accept="image/*" /></div>
+        <div class="field"><label>Current stamp</label>
+            @if (Model.HasStamp) { <img class="stamp-preview" src="@Url.Action("Stamp","Account", new { id = Model.Id })" /> } else { <span class="muted">None</span> }
+        </div>
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn" asp-action="Index">Back</a>
+</form>

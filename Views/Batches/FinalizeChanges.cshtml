@@ -1,0 +1,67 @@
+@using TowerProcessSheet.Controllers
+@using TowerProcessSheet.Services
+@{
+    ViewData["Title"] = "Contract / Work Order changes";
+    var rows = ViewBag.Rows as List<BatchesController.FinalizeChangeRow> ?? new();
+    string T(string k) => Tr.S(Context, k);
+}
+<div class="page-head no-print">
+    <h1>@T("fc_title")</h1>
+    <a class="btn" asp-action="SearchByContractOrWorkOrder">@T("fc_search_instead")</a>
+</div>
+
+@if (rows.Count == 0)
+{
+    <div class="empty">@T("fc_empty")</div>
+}
+else
+{
+    <table class="list-table">
+        <thead>
+            <tr>
+                <th>@T("sw_th_batch")</th>
+                <th>@T("sw_th_contract")</th>
+                <th>@T("sw_th_wo")</th>
+                <th>@T("fc_th_changed")</th>
+                <th class="actions-col"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in rows)
+            {
+                <tr>
+                    <td><strong>@r.BatchName</strong></td>
+                    <td>
+                        @if (r.OldContractNotificationNo != r.NewContractNotificationNo)
+                        {
+                            <span class="muted" style="text-decoration:line-through">@(r.OldContractNotificationNo ?? "—")</span>
+                            <span> → </span>
+                            <strong>@(r.NewContractNotificationNo ?? "—")</strong>
+                        }
+                        else
+                        {
+                            @(r.OldContractNotificationNo ?? "—")
+                        }
+                    </td>
+                    <td>
+                        @if (r.OldWorkOrderNo != r.NewWorkOrderNo)
+                        {
+                            <span class="muted" style="text-decoration:line-through">@(r.OldWorkOrderNo ?? "—")</span>
+                            <span> → </span>
+                            <strong>@(r.NewWorkOrderNo ?? "—")</strong>
+                        }
+                        else
+                        {
+                            @(r.OldWorkOrderNo ?? "—")
+                        }
+                    </td>
+                    <td class="muted">@r.ChangedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="actions-col">
+                        <a class="btn btn-sm" asp-action="Details" asp-route-id="@r.BatchId">@T("ix_open_batch")</a>
+                        <a class="btn btn-sm" asp-action="ProgramsFinalizeHistoryFor" asp-route-batchId="@r.BatchId">@T("sw_full_history")</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

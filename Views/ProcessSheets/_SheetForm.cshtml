@@ -1,0 +1,222 @@
+@using System.Text.Json
+@using Microsoft.EntityFrameworkCore
+@model ProcessSheet
+@inject TowerProcessSheet.Data.AppDbContext Db
+@{
+    var camel = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var opsJson = JsonSerializer.Serialize(OperationCatalog.Operations, camel);
+    var sectionData = JsonSerializer.Serialize(new
+    {
+        angle = OperationCatalog.AngleSections,
+        plate = OperationCatalog.PlateSections
+    }, camel);
+    var costCenters = await Db.CostCenters.OrderBy(c => c.Number).Select(c => new { c.Number, c.Name }).ToListAsync();
+    var costCentersJson = JsonSerializer.Serialize(costCenters, camel);
+}
+
+<div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+
+<fieldset class="card upload-card no-print">
+    <legend>1 ·  Auto-fill from drawing (PDF) — optional</legend>
+    <p class="hint">Have the drawing? Upload the PDF to auto-fill the fields and embed the diagram.
+        No drawing? Skip this — just fill the dropdowns below and save.</p>
+    <div class="upload-row">
+        <input type="file" id="drawingFile" name="drawingFile" accept="application/pdf,.pdf" class="input file-input" />
+        <button type="button" class="btn btn-primary" id="parseDrawing"
+                data-url="@Url.Action("ParseDrawing", "ProcessSheets")">Read drawing</button>
+        <span id="parseStatus" class="parse-status"></span>
+    </div>
+    @if (Model.Id > 0 && Model.BatchId.HasValue)
+    {
+        <p class="hint" style="margin-top:8px">
+            Fields above came out wrong? The saved marked positions for this batch may not match this
+            particular drawing.
+            <a asp-action="ConvertCalibrateThisSheet" asp-route-id="@Model.Id">🎯 Mark this drawing's fields manually</a>
+        </p>
+    }
+    <div id="pdfFallback" class="pdf-fallback hidden">
+        <p class="hint">Auto-detect couldn't read this one — here's the PDF so you can fill the fields in yourself below.</p>
+        <iframe id="pdfFallbackFrame" class="pdf-fallback-frame"></iframe>
+    </div>
+    @if (Model.DiagramImage != null && Model.DiagramImage.Length > 0)
+    {
+        <div class="field" style="margin-top:12px">
+            <label>Diagram display size (resize without re-uploading)</label>
+            <div style="display:flex;align-items:center;gap:10px">
+                <input type="range" name="DiagramScalePct" value="@(Model.DiagramScalePct == 0 ? 100 : Model.DiagramScalePct)" min="20" max="250" step="5" style="flex:1" id="diagScaleRange" />
+                <span id="diagScaleReadout">@(Model.DiagramScalePct == 0 ? 100 : Model.DiagramScalePct)%</span>
+            </div>
+        </div>
+        <script>
+          (function(){
+            var r = document.getElementById('diagScaleRange'), o = document.getElementById('diagScaleReadout');
+            if (r) r.addEventListener('input', function(){ o.textContent = r.value + '%'; });
+          })();
+        </script>
+    }
+</fieldset>
+
+<fieldset class="card crop-card no-print" id="cropCard" style="display:none;">
+    <legend>Review / resize the diagram crop</legend>
+    <p class="hint">Drag the box to move it, drag a corner to resize. This exact region is cropped from
+        the drawing and embedded at the bottom of the sheet when you save.</p>
+    <div class="crop-stage" id="cropStage">
+        <img id="cropImage" alt="drawing page" draggable="false" />
+        <div class="crop-box" id="cropBox">
+            <span class="crop-h tl"></span><span class="crop-h tr"></span>
+            <span class="crop-h bl"></span><span class="crop-h br"></span>
+        </div>
+    </div>
+    <div class="crop-actions">
+        <button type="button" class="btn btn-sm" id="cropReset">Reset to suggested</button>
+        <span class="hint-inline" id="cropReadout"></span>
+    </div>
+    <input type="hidden" name="cropX" id="cropX" />
+    <input type="hidden" name="cropY" id="cropY" />
+    <input type="hidden" name="cropW" id="cropW" />
+    <input type="hidden" name="cropH" id="cropH" />
+    <input type="hidden" name="diagramData" id="diagramData" />
+</fieldset>
+
+<fieldset class="card">
+    <legend>2 ·  From the Drawing (title block)</legend>
+    <div class="grid-3">
+        <div class="field">
+            <label asp-for="PartNo"></label>
+            <input asp-for="PartNo" class="input" placeholder="e.g. 109H" autocomplete="off" />
+            <span asp-validation-for="PartNo" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label asp-for="DrawingNo"></label>
+            <input asp-for="DrawingNo" class="input" placeholder="e.g. 109H" autocomplete="off" />
+            <span asp-validation-for="DrawingNo" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label asp-for="ProjectName"></label>
+            <input asp-for="ProjectName" class="input" placeholder="e.g. S2  220 kv" autocomplete="off" />
+            <span asp-validation-for="ProjectName" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label for="profileType">Profile</label>
+            <select id="profileType" class="input">
+                <option value="angle">Angle (L-section)</option>
+                <option value="plate">Plate</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="sectionSelect">Section / Size</label>
+            <select name="Section" id="sectionSelect" class="input" data-current="@Model.Section"></select>
+            <span class="hint-inline">Not in the list? Choose “Other” at the bottom and type it (e.g. L65*6).</span>
+            <span asp-validation-for="Section" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label asp-for="Qty"></label>
+            <input asp-for="Qty" class="input" type="number" min="0" />
+            <span asp-validation-for="Qty" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label asp-for="CutLength"></label>
+            <input asp-for="CutLength" class="input" type="number" min="0" placeholder="e.g. 1643" />
+            <span class="hint-inline">Used in “Cut the part with length = … mm”. Bar length stays fixed at 12000mm.</span>
+            <span asp-validation-for="CutLength" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label asp-for="Material"></label>
+            <select asp-for="Material" class="input">
+                <option value="">— select material —</option>
+                @foreach (var m in OperationCatalog.MaterialOptions)
+                {
+                    <option value="@m" selected="@(Model.Material == m)">@m</option>
+                }
+                @* A stored value that is not one of the presets (typed with "Other") must stay selected. *@
+                @if (!string.IsNullOrWhiteSpace(Model.Material) && !OperationCatalog.MaterialOptions.Contains(Model.Material))
+                {
+                    <option value="@Model.Material" selected="selected">@Model.Material</option>
+                }
+            </select>
+            <span class="hint-inline">Not in the list? Choose “Other” at the bottom and type it (format: GRADE / ST.xx).</span>
+            <span asp-validation-for="Material" class="field-error"></span>
+        </div>
+    </div>
+</fieldset>
+
+<fieldset class="card">
+    <legend>3 ·  Operations (in order)</legend>
+    <p class="hint">Pick the fabrication operations only. An <strong>inspection is added after every operation</strong>, and Material, Incoming Inspection, Galvanizing, Final Inspection and Final Store are generated for you.</p>
+    <span asp-validation-for="Operations" class="field-error"></span>
+
+    <input type="hidden" name="CustomMaterialCostCenter" id="hidCcMaterial" value="@Model.CustomMaterialCostCenter" />
+    <input type="hidden" name="CustomIncomingInspCostCenter" id="hidCcIncomingInsp" value="@Model.CustomIncomingInspCostCenter" />
+    <input type="hidden" name="CustomFinalInspCostCenter" id="hidCcFinalInsp" value="@Model.CustomFinalInspCostCenter" />
+    <input type="hidden" name="CustomFinalStoreCostCenter" id="hidCcFinalStore" value="@Model.CustomFinalStoreCostCenter" />
+    <div id="opsBody" class="ops-list">
+        @for (int i = 0; i < Model.Operations.Count; i++)
+        {
+            var opx = Model.Operations[i];
+            <div class="op-row">
+                <span class="op-handle">@(i + 1)</span>
+                <input type="hidden" name="Operations.Index" value="@i" />
+                <select class="input op-key" name="Operations[@i].OperationKey">
+                    <option value="">— select operation —</option>
+                    @foreach (var def in OperationCatalog.Operations)
+                    {
+                        <option value="@def.Key" selected="@(opx.OperationKey == def.Key)">@def.Name</option>
+                    }
+                </select>
+                <span class="op-hint">Edit any cell directly in the preview below ↓</span>
+                <div class="op-tools">
+                    <button type="button" class="btn-icon op-up" title="Move up">&uarr;</button>
+                    <button type="button" class="btn-icon op-down" title="Move down">&darr;</button>
+                    <button type="button" class="btn-icon btn-remove op-remove" title="Remove">&times;</button>
+                </div>
+                <input type="hidden" name="Operations[@i].CustomTimeAllowed" value="@opx.CustomTimeAllowed" />
+                <input type="hidden" name="Operations[@i].CustomCostCenter" value="@opx.CustomCostCenter" />
+                <input type="hidden" name="Operations[@i].CustomSetting" value="@opx.CustomSetting" />
+                <input type="hidden" name="Operations[@i].CustomDescription" value="@opx.CustomDescription" />
+                <input type="hidden" name="Operations[@i].CustomInspCostCenter" value="@opx.CustomInspCostCenter" />
+            </div>
+        }
+    </div>
+
+    <button type="button" class="btn" id="addOp">+ Add Operation</button>
+</fieldset>
+
+<fieldset class="card preview-card">
+    <legend>Live Preview (generated route card)</legend>
+    <div class="preview-scroll">
+        <table class="preview-table" id="previewTable">
+            <thead>
+                <tr>
+                    <th>Cost Cent.</th><th>Setting</th><th>Time</th><th>Op. No</th><th>Process Description</th>
+                </tr>
+            </thead>
+            <tbody id="previewBody"></tbody>
+        </table>
+    </div>
+</fieldset>
+
+<script id="opCatalog" type="application/json">@Html.Raw(opsJson)</script>
+<script id="costCenterCatalog" type="application/json">@Html.Raw(costCentersJson)</script>
+<script id="sectionData" type="application/json">@Html.Raw(sectionData)</script>
+
+<template id="opTemplate">
+    <div class="op-row">
+        <span class="op-handle"></span>
+        <input type="hidden" name="Operations.Index" value="__INDEX__" />
+        <select class="input op-key" name="Operations[__INDEX__].OperationKey">
+            <option value="">— select operation —</option>
+            __OPTIONS__
+        </select>
+        <span class="op-hint">Edit any cell directly in the preview below ↓</span>
+        <div class="op-tools">
+            <button type="button" class="btn-icon op-up" title="Move up">&uarr;</button>
+            <button type="button" class="btn-icon op-down" title="Move down">&darr;</button>
+            <button type="button" class="btn-icon btn-remove op-remove" title="Remove">&times;</button>
+        </div>
+        <input type="hidden" name="Operations[__INDEX__].CustomTimeAllowed" />
+        <input type="hidden" name="Operations[__INDEX__].CustomCostCenter" />
+        <input type="hidden" name="Operations[__INDEX__].CustomSetting" />
+        <input type="hidden" name="Operations[__INDEX__].CustomDescription" />
+        <input type="hidden" name="Operations[__INDEX__].CustomInspCostCenter" />
+    </div>
+</template>

@@ -1,0 +1,86 @@
+@model List<TowerProcessSheet.Models.Batch>
+@{
+    Layout = null;
+    var lang = Tr.Lang(Context);
+    var rtl = Tr.Rtl(Context);
+    string T(string k) => Tr.S(Context, k);
+    var counts = ViewBag.Counts as Dictionary<int, int> ?? new();
+    var lastMoves = ViewBag.LastMoves as Dictionary<int, TowerProcessSheet.Models.BatchTransfer> ?? new();
+    var ticker = ViewBag.Ticker as List<TowerProcessSheet.Models.BatchTransfer> ?? new();
+    string StName(TowerProcessSheet.Models.BatchStatus s) => T("st_" + s);
+}
+<!DOCTYPE html>
+<html lang="@lang" dir="@(rtl ? "rtl" : "ltr")">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="12" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@T("wall_title")</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="wall">
+    <header class="wall-head">
+        <img src="~/img/logo.png" alt="AOI" />
+        <div class="wall-title">@T("wall_title")</div>
+        <div class="wall-clock" id="clock"></div>
+    </header>
+
+    @if (Model.Count == 0)
+    {
+        <div class="wall-empty">@T("wall_none")</div>
+    }
+    else
+    {
+        <div class="wall-grid">
+            @foreach (var b in Model)
+            {
+                var mv = lastMoves.TryGetValue(b.Id, out var m) ? m : null;
+                <div class="wall-card anim-pop">
+                    <div class="wc-top">
+                        <span class="wc-name">@b.Name</span>
+                        <span class="wc-status s-@b.Status">@StName(b.Status)</span>
+                    </div>
+                    <div class="wc-project">@b.ProjectName</div>
+                    <div class="wc-holder">
+                        <span class="wc-label">@T("wall_with")</span>
+                        <span class="wc-person anim-glow">@(b.CurrentHolder?.FullName ?? b.CreatedBy?.FullName ?? "—")</span>
+                    </div>
+                    <div class="wc-meta">
+                        <span>@(counts.TryGetValue(b.Id, out var c) ? c : 0) @T("wall_sheets")</span>
+                        @if (mv != null)
+                        {
+                            <span class="wc-move">@(mv.FromUser?.FullName ?? "—") <span class="arrow">@(rtl ? "←" : "→")</span> @(mv.ToUser?.FullName ?? "—")</span>
+                        }
+                    </div>
+                    @if (mv != null)
+                    {
+                        <div class="wc-when">@T("wall_updated"): @mv.At.ToString("HH:mm · yyyy-MM-dd")</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (ticker.Count > 0)
+    {
+        <div class="wall-ticker">
+            <div class="ticker-track">
+                @foreach (var t in ticker)
+                {
+                    <span class="tick">@t.At.ToString("HH:mm") · @(t.FromUser?.FullName ?? "—") @(rtl ? "←" : "→") @(t.ToUser?.FullName ?? "—") (@t.Action)</span>
+                }
+            </div>
+        </div>
+    }
+
+    <script>
+      (function(){
+        function tick(){
+          var d=new Date(); var h=d.getHours(), m=String(d.getMinutes()).padStart(2,'0'), s=String(d.getSeconds()).padStart(2,'0');
+          document.getElementById('clock').textContent = h+':'+m+':'+s;
+        }
+        tick(); setInterval(tick,1000);
+      })();
+    </script>
+</body>
+</html>

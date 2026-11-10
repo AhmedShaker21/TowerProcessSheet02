@@ -1,0 +1,66 @@
+@model List<TowerProcessSheet.Models.Batch>
+@{
+    ViewData["Title"] = "History";
+    ViewData["FullWidth"] = true;
+    var counts = ViewBag.Counts as Dictionary<int, int> ?? new();
+    string q = ViewBag.Query as string ?? "";
+    string Chip(TowerProcessSheet.Models.BatchStatus s) => s switch
+    {
+        TowerProcessSheet.Models.BatchStatus.Approved => "chip-galv",
+        TowerProcessSheet.Models.BatchStatus.Rejected => "chip-rej",
+        TowerProcessSheet.Models.BatchStatus.InReview => "chip-angle",
+        _ => "chip-plate",
+    };
+}
+<div class="mb-wrap">
+    <div class="mb-head">
+        <div class="mb-head-icon mb-head-icon-neutral">🕘</div>
+        <div>
+            <h1>All Batches</h1>
+            <p>Every batch in the system. Open any one to see all its sheets and export it.</p>
+        </div>
+        <div class="mb-head-actions">
+            <div class="mb-stat-card" style="min-width:80px;padding:8px 16px">
+                <div class="mb-stat-num" style="font-size:20px">@Model.Count</div>
+                <div class="mb-stat-label">Batches</div>
+            </div>
+            <a class="btn btn-primary" asp-action="ExportHistory">⬇ Download all data</a>
+        </div>
+    </div>
+
+    <form method="get" asp-action="History" class="send-row" style="margin-bottom:14px">
+        <input class="input" name="q" value="@q" placeholder="Search by batch, project or contract no." />
+        <button class="btn btn-primary" type="submit">Search</button>
+        @if (!string.IsNullOrEmpty(q)) { <a class="btn" asp-action="History">Clear</a> }
+    </form>
+
+@if (Model.Count == 0)
+{
+    <div class="empty">No batches found.</div>
+}
+else
+{
+    <table class="list-table">
+        <thead><tr><th>Batch</th><th>Project</th><th>Contract</th><th>Sheets</th><th>Status</th><th>Now with</th><th>Created by</th><th>Created</th><th class="actions-col"></th></tr></thead>
+        <tbody>
+        @foreach (var b in Model)
+        {
+            <tr>
+                <td><strong>@b.Name</strong></td>
+                <td>@b.ProjectName</td>
+                <td>@b.ContractNo</td>
+                <td><span class="badge-count">@(counts.TryGetValue(b.Id, out var c) ? c : 0)</span></td>
+                <td><span class="chip @Chip(b.Status)">@b.Status</span></td>
+                <td>@(b.CurrentHolder?.FullName ?? "—")</td>
+                <td>@b.CreatedBy?.FullName</td>
+                <td class="muted">@b.CreatedAt.ToString("yyyy-MM-dd")</td>
+                <td class="actions-col">
+                    <a class="btn btn-sm" asp-action="Details" asp-route-id="@b.Id">Open</a>
+                    <a class="btn btn-sm" asp-action="Export" asp-route-id="@b.Id" target="_blank">Sheets</a>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+</div>

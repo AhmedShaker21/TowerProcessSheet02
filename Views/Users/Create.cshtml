@@ -1,0 +1,43 @@
+@model AppUser
+@{ ViewData["Title"] = "New user"; }
+<div class="page-head no-print"><h1>New User</h1></div>
+<form class="card" asp-action="Create" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="All" class="validation-summary"></div>
+    <div class="grid-3">
+        <div class="field"><label>Username</label><input class="input" name="Username" /></div>
+        <div class="field"><label>Password</label><input class="input" type="password" name="password" /></div>
+        <div class="field"><label>Department</label><input class="input" name="Department" list="deptList" />
+            <datalist id="deptList">@foreach (var d in (ViewBag.Departments as List<string> ?? new())) { <option value="@d"></option> }</datalist></div>
+    </div>
+    <div class="grid-3">
+        <div class="field"><label>Full name</label><input class="input" name="FullName" /></div>
+        <div class="field">
+            <label>Role (stamp slot)</label>
+            <select class="input" name="Slot">
+                @foreach (var s in Enum.GetValues<SignOffSlot>())
+                { <option value="@s">@s</option> }
+            </select>
+        </div>
+        <div class="field"><label>Admin?</label>
+            <select class="input" name="IsAdmin"><option value="false">No</option><option value="true">Yes</option></select>
+        </div>
+    </div>
+    <div class="grid-3">
+        <div class="field"><label>Planner? (can create/import batches)</label>
+            <select class="input" name="IsPlanner"><option value="false">No</option><option value="true">Yes</option></select>
+        </div>
+        <div class="field">
+            <label>Wall screen account (pipeline only)</label>
+            <select class="input" name="IsDisplay"><option value="false">No</option><option value="true">Yes</option></select>
+        </div>
+    </div>
+    <div class="field"><label>Stamp code (e.g. HAF 59)</label><input class="input" name="StampCode" /></div>
+    <div class="grid-2">
+        <div class="field"><label>Doc-Control sector (Quality)</label><input class="input" name="Sector" placeholder="e.g. R & D Sector" /></div>
+        <div class="field"><label>Issue number</label><input class="input" name="DocIssue" placeholder="e.g. 1" /></div>
+    </div>
+    <div class="field"><label>Stamp image (optional)</label><input class="input file-input" type="file" name="stamp" accept="image/*" /></div>
+    <button class="btn btn-primary" type="submit">Create user</button>
+    <a class="btn" asp-action="Index">Cancel</a>
+</form>

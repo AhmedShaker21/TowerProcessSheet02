@@ -1,0 +1,66 @@
+@model TowerProcessSheet.Models.BatchExportVm
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Batch @Model.Batch.Name — @Model.Sheets.Count sheets</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; background: #fff; color: #000; }
+  .exp-bar { padding: 12px 16px; background: #16264a; color: #fff; display: flex; gap: 12px; align-items: center; }
+  .exp-bar b { font-size: 15px; }
+  .exp-bar button { margin-left: auto; padding: 8px 14px; border: 0; border-radius: 6px; background: #f5a623; font-weight: 700; cursor: pointer; }
+  .sheet-page { padding: 10mm; page-break-after: always; }
+  .sheet-page:last-child { page-break-after: auto; }
+
+  table.route-card { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .route-card td { border: 1px solid #000; padding: 3px 6px; font-size: 11px; vertical-align: top; overflow-wrap: break-word; }
+  .route-card .hcell { font-weight: 700; vertical-align: middle; font-size: 12px; }
+  .route-card .hcell.left { padding-left: 8px; }
+  .route-card .hcell.big2 { font-size: 14px; }
+  .route-card .hcell.project { text-align: center; font-size: 14px; }
+  .route-card .hcell.project .big { font-size: 17px; }
+  .route-card .lbl { text-align: center; font-weight: 700; vertical-align: middle; }
+  .route-card .val { text-align: center; font-weight: 700; height: 20px; }
+  .route-card .val.big { font-size: 14px; }
+  .route-card .cols td { text-align: center; font-weight: 700; vertical-align: middle; font-size: 10px; }
+  .route-card .c { text-align: center; font-weight: 700; }
+  .route-card .desc { text-align: left; font-weight: 700; white-space: pre-line; line-height: 1.25; }
+  .route-card .insp { background: #eef4ff; }
+  .route-card .step td { height: 26px; }
+  .stampcol { text-align: center; vertical-align: middle; }
+  .cell-stamp { display: inline-block; color: #d0141c; border: 2px solid #d0141c; border-radius: 50%; padding: 2px 8px; font: 800 10px/1.1 Arial; white-space: nowrap; }
+  .cell-stamp-img { max-height: 34px; max-width: 92%; }
+  .diagram-embed { border: 1px solid #000; border-top: none; padding: 6px; text-align: center; }
+  .diagram-embed img { max-width: 100%; max-height: 70mm; }
+  .doc-control-wrap { display: flex; justify-content: flex-end; margin: 6px 0; }
+  .doc-control-stamp { border: 3px solid #e11; padding: 6px 14px; min-width: 280px; text-align: center; color: #e11; }
+  .dc-title, .dc-sector { font-weight: 800; }
+  .dc-title { font-size: 18px; } .dc-sector { font-size: 16px; }
+  .dc-line { font-weight: 700; font-size: 13px; } .dc-blue { color: #14c; }
+  .route-footer, .footer-full { width: 100%; border-collapse: collapse; }
+  .footer-full td { border: none; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+  .footer-full .docref { text-align: right; }
+  .sig-img { max-height: 40px; max-width: 150px; vertical-align: middle; margin-left: 8px; }
+  .filler-row td { height: 8mm; }
+  @@media print { .exp-bar { display: none; } .sheet-page { padding: 0; } @@page { size: A4 portrait; margin: 8mm; } }
+</style>
+</head>
+<body>
+  <div class="exp-bar">
+    <b>Batch @Model.Batch.Name</b>
+    <span>@Model.Sheets.Count sheet(s)</span>
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+  @foreach (var sheet in Model.Sheets)
+  {
+    <div class="sheet-page">
+      @await Html.PartialAsync("_RouteCard", sheet)
+    </div>
+  }
+</body>
+</html>

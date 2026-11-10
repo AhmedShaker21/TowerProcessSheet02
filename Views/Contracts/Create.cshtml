@@ -1,0 +1,17 @@
+@model TowerProcessSheet.Models.Contract
+@{ ViewData["Title"] = "New contract"; }
+<div class="page-head no-print"><h1>New Contract</h1></div>
+<form class="card" asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="All" class="validation-summary"></div>
+    <div class="grid-2">
+        <div class="field"><label>Contract No (e.g. 18/26)</label><input class="input" name="contractNo" /></div>
+        <div class="field"><label>Work Order No (e.g. 413/256/1)</label><input class="input" name="workOrderNo" /></div>
+    </div>
+    <div class="grid-2">
+        <div class="field"><label>Project (optional)</label><input class="input" name="projectName" /></div>
+        <div class="field"><label>Quantity multiplier (how many to produce)</label><input class="input" type="number" min="1" name="qtyMultiplier" value="1" /></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Create &amp; choose batches</button>
+    <a class="btn" asp-action="Index">Cancel</a>
+</form>
